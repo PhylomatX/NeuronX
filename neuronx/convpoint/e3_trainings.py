@@ -3,7 +3,6 @@ import torch
 import random
 import pickle
 import warnings
-import ipdb
 import numpy as np
 from torch import nn
 from datetime import date
@@ -26,23 +25,22 @@ def start_trainings():
 
     for radius in [1000, 8000, 15000, 25000]:
         for npoints in [1000, 5000, 10000]:
-            args = ['/u/jklimesch/thesis/trainings/current/',                   # save_root
-                    '/u/jklimesch/thesis/gt/gt_poisson/ads/',                   # train_path
-                    radius,                                                     # radius
-                    npoints,                                                    # npoints
-                    today + '_{}'.format(radius) + '_{}'.format(npoints),       # name
-                    3,                                                          # nclasses
-                    [clouds.RandomVariation((-10, 10)),                         # train transforms
-                     clouds.Normalization(radius),
+            args = ['/u/jklimesch/thesis/trainings/current/',                       # save_root
+                    '/u/jklimesch/thesis/gt/gt_poisson/ads/',                       # train_path
+                    radius,                                                         # radius
+                    npoints,                                                        # npoints
+                    today + '_{}'.format(radius) + '_{}'.format(npoints),           # name
+                    3,                                                              # nclasses
+                    [clouds.RandomVariation((-10, 10)),
                      clouds.RandomRotate(),
                      clouds.Center()],
-                    [clouds.Normalization(radius), clouds.Center()],            # val transforms
-                    16,                                                         # batch_size
-                    True,                                                       # use_cuda
-                    1,                                                          # input_channels
-                    True,                                                       # use_big
-                    0,                                                          # random_seed
-                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/'             # val_path
+                    [clouds.Center()],                                              # val transforms
+                    16,                                                             # batch_size
+                    True,                                                           # use_cuda
+                    1,                                                              # input_channels
+                    True,                                                           # use_big
+                    0,                                                              # random_seed
+                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/'                 # val_path
                     ]
             multi_params.append(args)
 
@@ -130,7 +128,7 @@ def training_thread(args):
         device=device,
         train_dataset=train_ds,
         valid_dataset=val_ds,
-        val_freq=3,
+        val_freq=10,
         pred_mapper=pm,
         batchsize=batch_size,
         num_workers=0,
@@ -152,29 +150,5 @@ def training_thread(args):
 
 
 if __name__ == '__main__':
-    # global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
-
-    radius = 20000
-    npoints = 5000
-
-    today = date.today().strftime("%Y_%m_%d")
-    args = ['/u/jklimesch/thesis/trainings/current/',                           # save_root
-            '/u/jklimesch/thesis/gt/gt_poisson/ads/',                           # train_path
-            radius,                                                             # radius
-            npoints,                                                            # npoints
-            today + '_{}'.format(radius) + '_{}'.format(npoints),               # name
-            3,                                                                  # nclasses
-            [clouds.RandomVariation((-10, 10)),                                 # train transforms
-             clouds.Normalization(radius),
-             clouds.RandomRotate(),
-             clouds.Center()],
-            [clouds.Normalization(radius), clouds.Center()],                    # val transforms
-            16,                                                                 # batch_size
-            True,                                                               # use_cuda
-            1,                                                                  # input_channels
-            True,                                                               # use_big
-            0,                                                                  # random_seed
-            '/u/jklimesch/thesis/gt/gt_poisson/ads/single/'                      # val_path
-            ]
-
-    training_thread(args)
+    global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
+    start_trainings()
