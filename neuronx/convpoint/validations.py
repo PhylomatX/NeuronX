@@ -61,30 +61,30 @@ def validation_thread(args):
     for hc in ch.hc_names:
         merged = None
         for batch in tqdm(range(math.ceil(ch.get_hybrid_length(hc) / batch_size))):
-            t_pts = torch.zeros((batch_size, npoints, 3))
-            t_features = torch.ones((batch_size, npoints, 1))
+            pts = torch.zeros((batch_size, npoints, 3))
+            feats = torch.ones((batch_size, npoints, 1))
             centroids = []
 
             for j in range(batch_size):
                 chunk, centroid = ch[(hc, batch*batch_size+j)]
                 centroids.append(centroid)
-                t_pts[j] = torch.from_numpy(chunk.vertices)
+                pts[j] = torch.from_numpy(chunk.vertices)
 
             # apply model to batch of samples
-            t_pts = t_pts.to(device, non_blocking=True)
-            t_features = t_features.to(device, non_blocking=True)
+            pts = pts.to(device, non_blocking=True)
+            feats = feats.to(device, non_blocking=True)
             start = time.time()
-            outputs = model(t_features, t_pts)
+            outputs = model(feats, pts)
             model_time += time.time() - start
             model_counter += 1
 
-            t_pts = t_pts.cpu().detach().numpy()
+            pts = pts.cpu().detach().numpy()
             output_np = outputs.cpu().detach().numpy()
             output_np = np.argmax(output_np, axis=2)
 
             for j in range(batch_size):
-                if not np.all(t_pts[j] == 0):
-                    prediction = PointCloud(t_pts[j], output_np[j])
+                if not np.all(pts[j] == 0):
+                    prediction = PointCloud(pts[j], output_np[j])
 
                     # Apply invers transformations
                     prediction.move(centroids[j])

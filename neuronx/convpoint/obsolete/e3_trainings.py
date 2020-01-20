@@ -3,15 +3,14 @@ import torch
 import random
 import pickle
 import warnings
-import ipdb
 import numpy as np
 from torch import nn
 from datetime import date
 from syconn.mp import batchjob_utils as qu
 import morphx.processing.clouds as clouds
-from morphx.data.torchhandler import TorchHandler
 from morphx.data.chunkhandler import ChunkHandler
 from morphx.postprocessing.mapping import PredictionMapper
+from morphx.data.torchset import TorchSet
 from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
@@ -32,17 +31,15 @@ def start_trainings():
                     npoints,                                                    # npoints
                     today + '_{}'.format(radius) + '_{}'.format(npoints),       # name
                     3,                                                          # nclasses
-                    [clouds.RandomVariation((-10, 10)),                         # train transforms
+                    [clouds.RandomVariation((-10, 10)),                         # transforms
                      clouds.Normalization(radius),
                      clouds.RandomRotate(),
                      clouds.Center()],
-                    [clouds.Normalization(radius), clouds.Center()],            # val transforms
                     16,                                                         # batch_size
                     True,                                                       # use_cuda
                     1,                                                          # input_channels
                     True,                                                       # use_big
-                    0,                                                          # random_seed
-                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/'             # val_path
+                    0                                                           # random_seed
                     ]
             multi_params.append(args)
 
@@ -59,14 +56,12 @@ def training_thread(args):
     npoints = args[3]
     name = args[4]
     nclasses = args[5]
-    train_transforms = args[6]
-    val_transforms = args[7]
-    batch_size = args[8]
-    use_cuda = args[9]
-    input_channels = args[10]
-    use_big = args[11]
-    random_seed = args[12]
-    val_path = args[13]
+    transforms = args[6]
+    batch_size = args[7]
+    use_cuda = args[8]
+    input_channels = args[9]
+    use_big = args[10]
+    random_seed = args[11]
 
     # define other parameters
     lr = 1e-3
@@ -108,12 +103,8 @@ def training_thread(args):
             warnings.simplefilter("ignore")
             tracedmodel = torch.jit.trace(model, (example_feats, example_pts))
 
-    train_transform = clouds.Compose(train_transforms)
-    train_ds = TorchHandler(train_path, radius, npoints, train_transform, specific=False)
-
-    val_transform = clouds.Compose(val_transforms)
-    val_ds = ChunkHandler(val_path, radius, npoints, val_transform, specific=True)
-    pm = PredictionMapper(val_path, save_root + 'validation/' + name + '/', radius)
+    train_transform = clouds.Compose(transforms)
+    train_ds = TorchSet(train_path, radius, npoints, train_transform, class_num=nclasses)
 
     # initialize optimizer, scheduler, loss and trainer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -129,9 +120,6 @@ def training_thread(args):
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
-        valid_dataset=val_ds,
-        val_freq=3,
-        pred_mapper=pm,
         batchsize=batch_size,
         num_workers=0,
         save_root=save_root,
@@ -152,29 +140,5 @@ def training_thread(args):
 
 
 if __name__ == '__main__':
-    # global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
-
-    radius = 20000
-    npoints = 5000
-
-    today = date.today().strftime("%Y_%m_%d")
-    args = ['/u/jklimesch/thesis/trainings/current/',                           # save_root
-            '/u/jklimesch/thesis/gt/gt_poisson/ads/',                           # train_path
-            radius,                                                             # radius
-            npoints,                                                            # npoints
-            today + '_{}'.format(radius) + '_{}'.format(npoints),               # name
-            3,                                                                  # nclasses
-            [clouds.RandomVariation((-10, 10)),                                 # train transforms
-             clouds.Normalization(radius),
-             clouds.RandomRotate(),
-             clouds.Center()],
-            [clouds.Normalization(radius), clouds.Center()],                    # val transforms
-            16,                                                                 # batch_size
-            True,                                                               # use_cuda
-            1,                                                                  # input_channels
-            True,                                                               # use_big
-            0,                                                                  # random_seed
-            '/u/jklimesch/thesis/gt/gt_poisson/ads/single/'                      # val_path
-            ]
-
-    training_thread(args)
+    global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
+    start_trainings()
