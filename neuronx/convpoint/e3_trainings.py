@@ -15,7 +15,7 @@ from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
-from elektronn3.models.convpoint import SegSmall, SegBig
+from elektronn3.models.convpoint import SegSmall, SegNoBatch, SegBig
 from elektronn3.training import Trainer3d, Backup
 
 
@@ -40,7 +40,8 @@ def start_trainings():
                     1,                                                              # input_channels
                     True,                                                           # use_big
                     0,                                                              # random_seed
-                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/'                 # val_path
+                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/',                # val_path
+                    False                                                           # no_batch
                     ]
             multi_params.append(args)
 
@@ -65,6 +66,7 @@ def training_thread(args):
     use_big = args[11]
     random_seed = args[12]
     val_path = args[13]
+    no_batch = args[14]
 
     # define other parameters
     lr = 1e-3
@@ -86,7 +88,9 @@ def training_thread(args):
         device = torch.device('cpu')
 
     # create network and dataset
-    if use_big:
+    if no_batch:
+        model = SegNoBatch(input_channels, nclasses)
+    elif use_big:
         model = SegBig(input_channels, nclasses)
     else:
         model = SegSmall(input_channels, nclasses)
@@ -107,7 +111,7 @@ def training_thread(args):
             tracedmodel = torch.jit.trace(model, (example_feats, example_pts))
 
     train_transform = clouds.Compose(train_transforms)
-    train_ds = TorchHandler(train_path, radius, npoints, train_transform, specific=False)
+    train_ds = TorchHandler(train_path, radius, npoints, train_transform)
 
     val_transform = clouds.Compose(val_transforms)
     val_ds = ChunkHandler(val_path, radius, npoints, val_transform, specific=True)
@@ -150,5 +154,34 @@ def training_thread(args):
 
 
 if __name__ == '__main__':
-    global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
-    start_trainings()
+
+    multi = False
+
+    if multi:
+        global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
+        start_trainings()
+    else:
+        today = date.today().strftime("%Y_%m_%d")
+        chunk_size = 20000
+        sample_num = 5000
+        args = ['/u/jklimesch/thesis/trainings/current/',                                   # save_root
+                '/u/jklimesch/thesis/gt/gt_poisson/ads/',                                   # train_path
+                chunk_size,                                                                 # radius
+                sample_num,                                                                 # npoints
+                today + '_{}'.format(chunk_size) + '_{}'.format(sample_num) + '_nobatch',   # name
+                3,                                                                          # nclasses
+                [clouds.RandomRotate(),
+                 clouds.RandomVariation((-10, 10)),
+                 clouds.Normalization(chunk_size),                                          # train transforms
+                 clouds.Center()],
+                [clouds.Normalization(chunk_size),
+                 clouds.Center()],                                                          # val transforms
+                16,                                                                         # batch_size
+                False,                                                                       # use_cuda
+                1,                                                                          # input_channels
+                True,                                                                      # use_big
+                0,                                                                          # random_seed
+                '/u/jklimesch/thesis/gt/gt_poisson/ads/single/',                            # val_path
+                False                                                                        # no_batch
+                ]
+        training_thread(args)

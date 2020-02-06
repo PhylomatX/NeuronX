@@ -16,7 +16,7 @@ if __name__ == '__main__':
         if full is None:
             full = sample
         else:
-            full = clouds.merge_clouds(full, sample)
+            full = clouds.merge_clouds([full, sample])
 
     with open(data_path + 'chunks.pkl', 'wb') as f:
         pickle.dump(full, f)

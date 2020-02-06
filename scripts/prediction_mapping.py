@@ -27,7 +27,7 @@ def prediction_sanity():
         if merged is None:
             merged = pred_cloud
         else:
-            merged = clouds.merge_clouds(merged, pred_cloud)
+            merged = clouds.merge_clouds([merged, pred_cloud])
         clouds.save_cloud(pred_cloud, save_path, 'chunk_{}'.format(idx))
         pm.map_predictions(pred_cloud, 'sso_46319619_c', idx)
     pm.save_prediction()
@@ -71,7 +71,7 @@ def batch_prediction():
                 if merged is None:
                     merged = prediction
                 else:
-                    merged = clouds.merge_clouds(merged, prediction)
+                    merged = clouds.merge_clouds([merged, prediction])
 
                 pm.map_predictions(prediction, hc, batch * batch_size + j)
             else:

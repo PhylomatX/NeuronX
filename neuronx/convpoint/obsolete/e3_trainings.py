@@ -15,7 +15,7 @@ from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
-from elektronn3.models.convpoint import SegSmall, SegBig
+from elektronn3.models.convpoint import SegSmall, SegNoBatch
 from elektronn3.training import Trainer3d, Backup
 
 
@@ -84,7 +84,7 @@ def training_thread(args):
 
     # create network and dataset
     if use_big:
-        model = SegBig(input_channels, nclasses)
+        model = SegNoBatch(input_channels, nclasses)
     else:
         model = SegSmall(input_channels, nclasses)
 

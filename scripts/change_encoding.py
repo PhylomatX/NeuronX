@@ -16,7 +16,7 @@ def change_ensembles(input_path: str, output_path: str):
         cell = ce.get_cloud('cell')
         encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
         cell = HybridCloud(cell.nodes, cell.edges, cell.vertices, labels=cell.labels, encoding=encoding)
-        ce.set_cloud(cell, 'cell')
+        ce.add_cloud(cell, 'cell')
         ensembles.save_ensemble(ce, output_path, name=name + '_c')
 
 

@@ -4,7 +4,7 @@ import time
 import numpy as np
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.classes.pointcloud import PointCloud
-from morphx.processing import graphs, clouds, hybrids
+from morphx.processing import graphs, clouds, hybrids, dispatcher
 
 
 def load_hybrids(paths):
@@ -59,14 +59,14 @@ if __name__ == '__main__':
     for spoint in spoints:
         start = time.time()
         local_bfs = graphs.local_bfs_dist(graph, spoint, radius+overlap)
-        subset = hybrids.extract_cloud_subset(hybrid, local_bfs)
-        subset = clouds.sample_cloud(subset, sample_num)
+        subset = dispatcher.extract_cloud_subset(hybrid, local_bfs)
+        subset, ixs = clouds.sample_objectwise(subset, sample_num)
         duration += time.time()-start
 
         if len(total.vertices) == 0:
             total = subset
         else:
-            total = clouds.merge_clouds(total, subset)
+            total = clouds.merge_clouds([total, subset])
         im_name += 1
     print("Total time for iterating cell: ", duration)
     print("Mean sample extraction duration: ", duration/im_name)
