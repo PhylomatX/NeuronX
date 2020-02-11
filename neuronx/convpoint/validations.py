@@ -13,7 +13,59 @@ from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegSmall, SegBig
 
 
+def validate_single(ch: ChunkHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
+                    device: torch.device, model, pm: PredictionMapper):
+    """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
+    chunk_timing = 0
+    model_timing = 0
+    map_timing = 0
+
+    batch_num = math.ceil(ch.get_obj_length(hc) / batch_size)
+
+    zero_counter = 0
+    for i in range(iter_num):
+        for batch in tqdm(range(batch_num)):
+            pts = torch.zeros((batch_size, point_num, 3))
+            feats = torch.ones((batch_size, point_num, 1))
+            mapping_idcs = np.ones((batch_size, point_num))
+            obj_bounds = []
+
+            for j in range(batch_size):
+                start = time.time()
+                chunk, idcs = ch[(hc, batch * batch_size + j)]
+                obj_bounds.append(chunk.obj_bounds)
+                chunk_timing += time.time() - start
+                mapping_idcs[j] = idcs
+                pts[j] = torch.from_numpy(chunk.vertices)
+
+            # apply model to batch of samples
+            pts = pts.to(device, non_blocking=True)
+            feats = feats.to(device, non_blocking=True)
+            start = time.time()
+            outputs = model(feats, pts)
+            model_timing += time.time() - start
+
+            pts = pts.cpu().detach().numpy()
+            output_np = outputs.cpu().detach().numpy()
+            output_np = np.argmax(output_np, axis=2)
+
+            for j in range(batch_size):
+                if not np.all(pts[j] == 0):
+                    start = time.time()
+                    prediction = PointCloud(pts[j], output_np[j], obj_bounds=obj_bounds[j])
+                    pm.map_predictions(prediction, mapping_idcs[j], hc, batch * batch_size + j)
+                    map_timing += time.time() - start
+                else:
+                    zero_counter += 1
+
+    chunk_factor = batch_size * iter_num * batch_num
+    map_factor = batch_size * iter_num * batch_num - zero_counter
+    return chunk_timing / chunk_factor, model_timing / (iter_num * batch_num), map_timing / map_factor
+
+
 def validation_thread(args):
+    """ Can be used for parallel validations using the multiprocessing framework from SyConn. """
+
     save_root = os.path.expanduser(args[0])
     data_path = os.path.expanduser(args[1])
     radius = args[2]
@@ -46,17 +98,16 @@ def validation_thread(args):
     full = torch.load(save_root + name + '/state_dict.pth')
     model.load_state_dict(full['model_state_dict'])
     model.to(device)
-    # model.eval()
+    model.eval()
 
     # load scripted model
     # model_path = save_root + '/' + name + '/model.pts'
     # model = torch.jit.load(model_path, map_location=device)
     # model.eval()
 
-    hc_timing = []
-    mapping_timing = []
-    model_time = 0
-    model_counter = 0
+    chunk_times = []
+    map_times = []
+    model_times = []
 
     transforms = clouds.Compose(transforms)
     ch = ChunkHandler(data_path, radius, npoints, transform=transforms, specific=True)
@@ -70,54 +121,23 @@ def validation_thread(args):
         pickle.dump(args, f)
         f.close()
 
-    for hc in ch.hc_names:
-        curr_hc_timing = 0
-        curr_map_timing = 0
-        for i in range(iter_num):
-            for batch in tqdm(range(math.ceil(ch.get_hybrid_length(hc) / batch_size))):
-                hc_start = time.time()
-                pts = torch.zeros((batch_size, npoints, 3))
-                feats = torch.ones((batch_size, npoints, 1))
-                mapping_idcs = np.ones((batch_size, npoints))
-
-                for j in range(batch_size):
-                    chunk, idcs = ch[(hc, batch*batch_size+j)]
-                    mapping_idcs[j] = idcs
-                    pts[j] = torch.from_numpy(chunk.vertices)
-
-                # apply model to batch of samples
-                pts = pts.to(device, non_blocking=True)
-                feats = feats.to(device, non_blocking=True)
-                start = time.time()
-                outputs = model(feats, pts)
-                model_time += time.time() - start
-                model_counter += 1
-
-                pts = pts.cpu().detach().numpy()
-                output_np = outputs.cpu().detach().numpy()
-                output_np = np.argmax(output_np, axis=2)
-
-                curr_hc_timing += time.time() - hc_start
-
-                map_start = time.time()
-                for j in range(batch_size):
-                    if not np.all(pts[j] == 0):
-                        prediction = PointCloud(pts[j], output_np[j])
-                        pm.map_predictions(prediction, mapping_idcs[j], hc, batch*batch_size+j)
-                curr_map_timing += time.time() - map_start
-        hc_timing.append(curr_hc_timing)
-        mapping_timing.append(curr_map_timing)
+    for hc in ch.obj_names:
+        chunk_timing, model_timing, map_timing = validate_single(ch, hc, batch_size, npoints, iter_num, device, model, pm)
+        chunk_times.append(chunk_timing)
+        model_times.append(model_timing)
+        map_times.append(map_timing)
     pm.save_prediction()
 
-    model_time = model_time / model_counter
     with open(info_folder + 'timing.txt', 'w') as f:
-        f.write(f'Convpoint timing, {batch_size * npoints} in {batch_size} batches: {model_time} s.\n')
-        f.write('\nPrediction timing:\n\n')
-        for idx, item in enumerate(ch.hc_names):
-            f.write(f'{item}: \t\t {hc_timing[idx]} s.\n')
+        f.write('\nModel timing:\n\n')
+        for idx, item in enumerate(ch.obj_names):
+            f.write(f'{item}: \t\t {model_times[idx]} s.\n')
+        f.write('\nChunk timing:\n\n')
+        for idx, item in enumerate(ch.obj_names):
+            f.write(f'{item}: \t\t {chunk_times[idx]} s.\n')
         f.write('\nMapping timing:\n\n')
-        for idx, item in enumerate(ch.hc_names):
-            f.write(f'{item}: \t\t {mapping_timing[idx]} s.\n')
+        for idx, item in enumerate(ch.obj_names):
+            f.write(f'{item}: \t\t {map_times[idx]} s.\n')
         f.close()
 
 
@@ -127,10 +147,10 @@ if __name__ == '__main__':
 
     for radius, npoints in [(20000, 8192), (15000, 6000), (10000, 4096)]:
         args = ['/u/jklimesch/thesis/trainings/past/2019/12_17/',           # save_root
-                '/u/jklimesch/thesis/gt/gt_poisson/',                   # train_path
+                '/u/jklimesch/thesis/gt/gt_poisson/',                       # train_path
                 radius,                                                     # radius
                 npoints,                                                    # npoints
-                '{}'.format(radius) + '_{}'.format(npoints),     # name
+                '{}'.format(radius) + '_{}'.format(npoints),                # name
                 5,                                                          # nclasses
                 [clouds.Normalization(radius), clouds.Center()],
                 16,                                                         # batch_size

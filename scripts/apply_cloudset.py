@@ -5,6 +5,8 @@ import os
 import glob
 import re
 import argparse
+
+import morphx.processing.objects
 from morphx.processing import clouds, visualize
 from morphx.data.cloudset import CloudSet
 
@@ -23,7 +25,7 @@ radius = args.ra
 sample_num = args.sp
 
 for file in files:
-    hc = clouds.load_cloud(file)
+    hc = morphx.processing.objects.load_pkl(file)
 
     data = CloudSet(data_path, radius, sample_num)
     data.activate_single(hc)

@@ -2,6 +2,8 @@ import glob
 import pickle
 import time
 import numpy as np
+
+import morphx.processing.objects
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.classes.pointcloud import PointCloud
 from morphx.processing import graphs, clouds, hybrids, dispatcher
@@ -59,7 +61,7 @@ if __name__ == '__main__':
     for spoint in spoints:
         start = time.time()
         local_bfs = graphs.local_bfs_dist(graph, spoint, radius+overlap)
-        subset = dispatcher.extract_cloud_subset(hybrid, local_bfs)
+        subset = morphx.processing.objects.extract_cloud_subset(hybrid, local_bfs)
         subset, ixs = clouds.sample_objectwise(subset, sample_num)
         duration += time.time()-start
 

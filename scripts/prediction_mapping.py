@@ -3,6 +3,8 @@ import math
 import ipdb
 import numpy as np
 from tqdm import tqdm
+
+import morphx.processing.objects
 from morphx.processing import clouds
 from morphx.classes.pointcloud import PointCloud
 from morphx.data.chunkhandler import ChunkHandler
@@ -19,7 +21,7 @@ def prediction_sanity():
     pm = PredictionMapper(data_path, data_path + 'predicted/', radius)
 
     merged = None
-    size = cl.get_hybrid_length('sso_46319619_c')
+    size = cl.get_obj_length('sso_46319619_c')
     for idx in range(size):
         sample, centroid = cl[('sso_46319619_c', idx)]
         labels = np.ones(len(sample.labels))*idx
@@ -28,10 +30,10 @@ def prediction_sanity():
             merged = pred_cloud
         else:
             merged = clouds.merge_clouds([merged, pred_cloud])
-        clouds.save_cloud(pred_cloud, save_path, 'chunk_{}'.format(idx))
+        morphx.processing.objects.save2pkl(pred_cloud, save_path, 'chunk_{}'.format(idx))
         pm.map_predictions(pred_cloud, 'sso_46319619_c', idx)
     pm.save_prediction()
-    clouds.save_cloud(merged, save_path, 'merged')
+    morphx.processing.objects.save2pkl(merged, save_path, 'merged')
 
 
 def batch_prediction():
@@ -48,8 +50,8 @@ def batch_prediction():
     merged = None
     batch_size = 16
     hc = 'sso_46319619_c'
-    print(ch.get_hybrid_length(hc))
-    for batch in tqdm(range(math.ceil(ch.get_hybrid_length(hc) / batch_size))):
+    print(ch.get_obj_length(hc))
+    for batch in tqdm(range(math.ceil(ch.get_obj_length(hc) / batch_size))):
         t_pts = np.zeros((batch_size, npoints, 3))
         centroids = []
 
@@ -77,7 +79,7 @@ def batch_prediction():
             else:
                 print('Zeros detected.')
     pm.save_prediction()
-    clouds.save_cloud(merged, save_path, 'merged')
+    morphx.processing.objects.save2pkl(merged, save_path, 'merged')
 
 
 if __name__ == '__main__':
