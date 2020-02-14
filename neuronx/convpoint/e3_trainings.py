@@ -167,10 +167,10 @@ if __name__ == '__main__':
         start_trainings()
     else:
         today = date.today().strftime("%Y_%m_%d")
-        chunk_size = 10000
-        sample_num = 5000
+        chunk_size = 15000
+        sample_num = 20000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
-                '/u/jklimesch/thesis/gt/gt_ensembles/ads/',  # train_path
+                '/u/jklimesch/thesis/gt/gt_ensembles/ads/single/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
                 today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
@@ -180,7 +180,7 @@ if __name__ == '__main__':
                  clouds.Normalization(chunk_size),
                  clouds.Center()],
                 [clouds.Center()],  # val transforms
-                16,  # batch_size
+                4,  # batch_size
                 True,  # use_cuda
                 1,  # input_channels
                 True,  # use_big

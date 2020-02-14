@@ -93,6 +93,21 @@ def create_ads(data_path: str, output_path: str):
         objects.save2pkl(ce, output_path, name=name)
 
 
+def update_saving_standard(data_path: str, output_path: str):
+    data_path = os.path.expanduser(data_path)
+    output_path = os.path.expanduser(output_path)
+    files = glob.glob(data_path + '*.pkl')
+    if not os.path.isdir(output_path):
+        os.makedirs(output_path)
+
+    for file in tqdm(files):
+        slashs = [pos for pos, char in enumerate(file) if char == '/']
+        name = file[slashs[-1]+1:-4]
+        ce = objects.load_pkl(file)
+        ce.hc.set_features(np.ones((len(ce.hc.vertices), 1)))
+        ce.save2pkl(output_path, name=name)
+
+
 def transfer_skeleton(origin: str, target: str, output: str):
     files = glob.glob(target + '*.pkl')
     if not os.path.isdir(output):
@@ -120,4 +135,6 @@ if __name__ == '__main__':
     # transfer_skeleton('/u/jklimesch/thesis/gt/gt_poisson/', '/u/jklimesch/thesis/gt/gt_ensembles/',
     #                   '/u/jklimesch/thesis/gt/gt_ensembles/')
     # add_features('/u/jklimesch/thesis/gt/gt_ensembles/', '/u/jklimesch/thesis/gt/gt_ensembles/')
-    create_ads('/u/jklimesch/thesis/gt/gt_ensembles/', '/u/jklimesch/thesis/gt/gt_ensembles/ads/')
+    # create_ads('/u/jklimesch/thesis/gt/gt_ensembles/', '/u/jklimesch/thesis/gt/gt_ensembles/ads/')
+    update_saving_standard('/u/jklimesch/thesis/gt/gt_ensembles/ads/old_standard/',
+                           '/u/jklimesch/thesis/gt/gt_ensembles/ads/')
