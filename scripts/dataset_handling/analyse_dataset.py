@@ -3,8 +3,8 @@
 
 import os
 import argparse
-from morphx.data.analyser import Analyser
-from morphx.data.cloudset import CloudSet
+from scripts.old.analyser import Analyser
+from scripts.old.cloudset import CloudSet
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str, help='Set data path.')

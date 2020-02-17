@@ -105,7 +105,7 @@ def update_saving_standard(data_path: str, output_path: str):
         name = file[slashs[-1]+1:-4]
         ce = objects.load_pkl(file)
         ce.hc.set_features(np.ones((len(ce.hc.vertices), 1)))
-        ce.save2pkl(output_path, name=name)
+        ce.save2pkl(output_path + name + 'pkl')
 
 
 def transfer_skeleton(origin: str, target: str, output: str):

@@ -7,8 +7,8 @@ import re
 import argparse
 
 import morphx.processing.objects
-from morphx.processing import clouds, visualize
-from morphx.data.cloudset import CloudSet
+from morphx.processing import visualize
+from scripts.old.cloudset import CloudSet
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--da', type=str, help='Set data path.')

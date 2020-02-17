@@ -7,53 +7,69 @@ import pickle
 import numpy as np
 from tqdm import tqdm
 from morphx.processing import clouds
-from morphx.data.chunkhandler import ChunkHandler
+from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegSmall, SegBig
 
 
-def validate_single(ch: ChunkHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
+def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
                     device: torch.device, model, pm: PredictionMapper):
     """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
     chunk_timing = 0
     model_timing = 0
     map_timing = 0
 
-    batch_num = math.ceil(ch.get_obj_length(hc) / batch_size)
+    batch_num = math.ceil(th.get_obj_length(hc) / batch_size)
 
     zero_counter = 0
     for i in range(iter_num):
         for batch in tqdm(range(batch_num)):
             pts = torch.zeros((batch_size, point_num, 3))
-            feats = torch.ones((batch_size, point_num, 1))
-            mapping_idcs = np.ones((batch_size, point_num))
-            obj_bounds = []
+            features = torch.ones((batch_size, point_num, 1))
+            mapping_idcs = torch.ones((batch_size, point_num))
+            mask = torch.zeros((batch_size, point_num))
 
             for j in range(batch_size):
                 start = time.time()
-                chunk, idcs = ch[(hc, batch * batch_size + j)]
-                obj_bounds.append(chunk.obj_bounds)
+                sample = th[(hc, batch * batch_size + j)]
                 chunk_timing += time.time() - start
-                mapping_idcs[j] = idcs
-                pts[j] = torch.from_numpy(chunk.vertices)
+
+                pts[j] = sample['pts']
+                features[j] = sample['features']
+                mapping_idcs[j] = sample['map']
+                mask[j] = sample['l_mask']
 
             # apply model to batch of samples
             pts = pts.to(device, non_blocking=True)
-            feats = feats.to(device, non_blocking=True)
+            features = features.to(device, non_blocking=True)
             start = time.time()
-            outputs = model(feats, pts)
+            outputs = model(features, pts)
             model_timing += time.time() - start
 
+            # convert all tensors to numpy arrays and apply argmax to outputs
             pts = pts.cpu().detach().numpy()
+            mask = mask.numpy()
+            mapping_idcs = mapping_idcs.numpy()
             output_np = outputs.cpu().detach().numpy()
             output_np = np.argmax(output_np, axis=2)
 
             for j in range(batch_size):
                 if not np.all(pts[j] == 0):
                     start = time.time()
-                    prediction = PointCloud(pts[j], output_np[j], obj_bounds=obj_bounds[j])
-                    pm.map_predictions(prediction, mapping_idcs[j], hc, batch * batch_size + j)
+
+                    # filter the points their outputs which should get a prediction
+                    curr_pts = pts[j]
+                    curr_out = output_np[j]
+                    curr_map = mapping_idcs[j]
+                    curr_mask = mask[j].astype(bool)
+                    curr_pts = curr_pts[curr_mask]
+                    curr_out = curr_out[curr_mask]
+                    curr_map = curr_map[curr_mask]
+
+                    # map predictions to original cloud
+                    prediction = PointCloud(curr_pts, curr_out)
+                    pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j)
                     map_timing += time.time() - start
                 else:
                     zero_counter += 1
@@ -98,22 +114,22 @@ def validation_thread(args):
     full = torch.load(save_root + name + '/state_dict.pth')
     model.load_state_dict(full['model_state_dict'])
     model.to(device)
-    model.eval()
 
     # load scripted model
     # model_path = save_root + '/' + name + '/model.pts'
     # model = torch.jit.load(model_path, map_location=device)
-    # model.eval()
+
+    model.eval()
 
     chunk_times = []
     map_times = []
     model_times = []
 
     transforms = clouds.Compose(transforms)
-    ch = ChunkHandler(data_path, radius, npoints, transform=transforms, specific=True)
-    pm = PredictionMapper(data_path, save_root + name + '/predictions/', radius)
+    th = TorchHandler(data_path, radius, npoints, nclasses, transform=transforms, specific=True)
+    pm = PredictionMapper(data_path, save_root + name + '/predictions_tr/', radius)
 
-    info_folder = save_root + name + '/predictions/info/'
+    info_folder = save_root + name + '/predictions_tr/info/'
     if not os.path.exists(info_folder):
         os.makedirs(info_folder)
 
@@ -121,44 +137,45 @@ def validation_thread(args):
         pickle.dump(args, f)
         f.close()
 
-    for hc in ch.obj_names:
-        chunk_timing, model_timing, map_timing = validate_single(ch, hc, batch_size, npoints, iter_num, device, model, pm)
+    for hc in th.obj_names:
+        chunk_timing, model_timing, map_timing = \
+            validate_single(th, hc, batch_size, npoints, iter_num, device, model, pm)
         chunk_times.append(chunk_timing)
         model_times.append(model_timing)
         map_times.append(map_timing)
+
     pm.save_prediction()
 
     with open(info_folder + 'timing.txt', 'w') as f:
         f.write('\nModel timing:\n\n')
-        for idx, item in enumerate(ch.obj_names):
+        for idx, item in enumerate(th.obj_names):
             f.write(f'{item}: \t\t {model_times[idx]} s.\n')
         f.write('\nChunk timing:\n\n')
-        for idx, item in enumerate(ch.obj_names):
+        for idx, item in enumerate(th.obj_names):
             f.write(f'{item}: \t\t {chunk_times[idx]} s.\n')
         f.write('\nMapping timing:\n\n')
-        for idx, item in enumerate(ch.obj_names):
+        for idx, item in enumerate(th.obj_names):
             f.write(f'{item}: \t\t {map_times[idx]} s.\n')
         f.close()
 
 
 if __name__ == '__main__':
-    radius = 15000
-    npoints = 10000
+    chunk_size = 15000
+    sample_num = 20000
+    args = ['/u/jklimesch/thesis/trainings/current/',                   # save_root
+            '/u/jklimesch/thesis/gt/gt_ensembles/ads/',                 # data path
+            chunk_size,                                                 # radius
+            sample_num,                                                 # npoints
+            '2020_02_16_' + '{}'.format(chunk_size) +
+            '_{}'.format(sample_num),                                   # name
+            3,                                                          # nclasses
+            [clouds.Normalization(chunk_size), clouds.Center()],
+            4,                                                          # batch_size
+            True,                                                       # use_cuda
+            1,                                                          # input_channels
+            True,                                                       # use_big
+            0,                                                          # random_seed
+            1                                                           # iteration number
+            ]
 
-    for radius, npoints in [(20000, 8192), (15000, 6000), (10000, 4096)]:
-        args = ['/u/jklimesch/thesis/trainings/past/2019/12_17/',           # save_root
-                '/u/jklimesch/thesis/gt/gt_poisson/',                       # train_path
-                radius,                                                     # radius
-                npoints,                                                    # npoints
-                '{}'.format(radius) + '_{}'.format(npoints),                # name
-                5,                                                          # nclasses
-                [clouds.Normalization(radius), clouds.Center()],
-                16,                                                         # batch_size
-                True,                                                       # use_cuda
-                1,                                                          # input_channels
-                True,                                                       # use_big
-                0,                                                          # random_seed
-                2                                                           # iteration number
-                ]
-
-        validation_thread(args)
+    validation_thread(args)

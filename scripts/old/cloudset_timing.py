@@ -2,8 +2,8 @@ import os
 import glob
 import time
 import argparse
-from morphx.processing import clouds, visualize
-from morphx.data.cloudset import CloudSet
+from morphx.processing import clouds
+from scripts.old.cloudset import CloudSet
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--da', type=str, help='Set data path.')

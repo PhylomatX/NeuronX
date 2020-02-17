@@ -112,7 +112,7 @@ def training_thread(args):
             tracedmodel = torch.jit.trace(model, (example_feats, example_pts))
 
     train_transform = clouds.Compose(train_transforms)
-    train_ds = TorchHandler(train_path, radius, npoints, train_transform)
+    train_ds = TorchHandler(train_path, radius, npoints, nclasses, train_transform)
 
     if validation:
         val_transform = clouds.Compose(val_transforms)
@@ -170,11 +170,11 @@ if __name__ == '__main__':
         chunk_size = 15000
         sample_num = 20000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
-                '/u/jklimesch/thesis/gt/gt_ensembles/ads/single/',  # train_path
+                '/u/jklimesch/thesis/gt/gt_ensembles/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
                 today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
-                3,  # nclasses
+                5,  # nclasses
                 [clouds.RandomVariation((-50, 50)),
                  clouds.RandomRotate(),
                  clouds.Normalization(chunk_size),
