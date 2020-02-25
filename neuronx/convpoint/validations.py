@@ -14,7 +14,7 @@ from elektronn3.models.convpoint import SegSmall, SegBig
 
 
 def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
-                    device: torch.device, model, pm: PredictionMapper):
+                    device: torch.device, model, pm: PredictionMapper, input_channels: int):
     """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
     chunk_timing = 0
     model_timing = 0
@@ -26,7 +26,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
     for i in range(iter_num):
         for batch in tqdm(range(batch_num)):
             pts = torch.zeros((batch_size, point_num, 3))
-            features = torch.ones((batch_size, point_num, 1))
+            features = torch.ones((batch_size, point_num, input_channels))
             mapping_idcs = torch.ones((batch_size, point_num))
             mask = torch.zeros((batch_size, point_num))
 
@@ -95,6 +95,7 @@ def validation_thread(args):
     use_big = args[10]
     random_seed = args[11]
     iter_num = args[12]
+    obj_feats = args[13]
 
     # set random seeds to ensure compareability of different trainings
     torch.manual_seed(random_seed)
@@ -126,7 +127,8 @@ def validation_thread(args):
     model_times = []
 
     transforms = clouds.Compose(transforms)
-    th = TorchHandler(data_path, radius, npoints, nclasses, transform=transforms, specific=True)
+    th = TorchHandler(data_path, radius, npoints, nclasses, transform=transforms, specific=True,
+                      obj_feats=obj_feats)
     pm = PredictionMapper(data_path, save_root + name + '/predictions_tr/', radius)
 
     info_folder = save_root + name + '/predictions_tr/info/'
@@ -139,7 +141,7 @@ def validation_thread(args):
 
     for hc in th.obj_names:
         chunk_timing, model_timing, map_timing = \
-            validate_single(th, hc, batch_size, npoints, iter_num, device, model, pm)
+            validate_single(th, hc, batch_size, npoints, iter_num, device, model, pm, input_channels)
         chunk_times.append(chunk_timing)
         model_times.append(model_timing)
         map_times.append(map_timing)
@@ -166,16 +168,21 @@ if __name__ == '__main__':
             '/u/jklimesch/thesis/gt/gt_ensembles/ads/',                 # data path
             chunk_size,                                                 # radius
             sample_num,                                                 # npoints
-            '2020_02_16_' + '{}'.format(chunk_size) +
+            '2020_02_20_' + '{}'.format(chunk_size) +
             '_{}'.format(sample_num),                                   # name
             3,                                                          # nclasses
             [clouds.Normalization(chunk_size), clouds.Center()],
             4,                                                          # batch_size
             True,                                                       # use_cuda
-            1,                                                          # input_channels
+            4,                                                          # input_channels
             True,                                                       # use_big
             0,                                                          # random_seed
-            1                                                           # iteration number
+            1,                                                          # iteration number
+            {'hc': np.array([1, 0, 0, 0]),
+             'mi': np.array([0, 1, 0, 0]),
+             'vc': np.array([0, 0, 1, 0]),
+             'syn': np.array([0, 0, 0, 1])
+             }                                                          # features
             ]
 
     validation_thread(args)

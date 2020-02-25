@@ -15,6 +15,7 @@ from morphx.postprocessing.mapping import PredictionMapper
 from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
+
 elektronn3.select_mpl_backend('Agg')
 from elektronn3.models.convpoint import SegSmall, SegBig
 from elektronn3.training import Trainer3d, Backup
@@ -26,24 +27,24 @@ def start_trainings():
 
     for radius in [1000, 8000, 15000, 25000]:
         for npoints in [1000, 5000, 10000]:
-            args = ['/u/jklimesch/thesis/trainings/current/',                       # save_root
-                    '/u/jklimesch/thesis/gt/gt_poisson/ads/',                       # train_path
-                    radius,                                                         # radius
-                    npoints,                                                        # npoints
-                    today + '_{}'.format(radius) + '_{}'.format(npoints),           # name
-                    3,                                                              # nclasses
+            args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
+                    '/u/jklimesch/thesis/gt/gt_poisson/ads/',  # train_path
+                    radius,  # radius
+                    npoints,  # npoints
+                    today + '_{}'.format(radius) + '_{}'.format(npoints),  # name
+                    3,  # nclasses
                     [clouds.RandomVariation((-10, 10)),
                      clouds.RandomRotate(),
                      clouds.Center()],
-                    [clouds.Center()],                                              # val transforms
-                    16,                                                             # batch_size
-                    True,                                                           # use_cuda
-                    1,                                                              # input_channels
-                    True,                                                           # use_big
-                    0,                                                              # random_seed
-                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/',                # val_path
-                    False,                                                          # track_running_stats
-                    False                                                           # validation
+                    [clouds.Center()],  # val transforms
+                    16,  # batch_size
+                    True,  # use_cuda
+                    1,  # input_channels
+                    True,  # use_big
+                    0,  # random_seed
+                    '/u/jklimesch/thesis/gt/gt_poisson/ads/single/',  # val_path
+                    False,  # track_running_stats
+                    False  # validation
                     ]
             multi_params.append(args)
 
@@ -70,6 +71,7 @@ def training_thread(args):
     val_path = args[13]
     trs = args[14]
     validation = args[15]
+    obj_feats = args[16]
 
     # define other parameters
     lr = 1e-3
@@ -112,11 +114,11 @@ def training_thread(args):
             tracedmodel = torch.jit.trace(model, (example_feats, example_pts))
 
     train_transform = clouds.Compose(train_transforms)
-    train_ds = TorchHandler(train_path, radius, npoints, nclasses, train_transform)
+    train_ds = TorchHandler(train_path, radius, npoints, nclasses, train_transform, obj_feats=obj_feats)
 
     if validation:
         val_transform = clouds.Compose(val_transforms)
-        val_ds = ChunkHandler(val_path, radius, npoints, val_transform, specific=True)
+        val_ds = ChunkHandler(val_path, radius, npoints, val_transform, specific=True, obj_feats=obj_feats)
         pm = PredictionMapper(val_path, save_root + 'validation/' + name + '/', radius)
     else:
         val_ds = None
@@ -168,13 +170,13 @@ if __name__ == '__main__':
     else:
         today = date.today().strftime("%Y_%m_%d")
         chunk_size = 15000
-        sample_num = 20000
+        sample_num = 15000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
-                '/u/jklimesch/thesis/gt/gt_ensembles/',  # train_path
+                '/u/jklimesch/thesis/gt/gt_meshsets/voxeled_old/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
                 today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
-                5,  # nclasses
+                7,  # nclasses
                 [clouds.RandomVariation((-50, 50)),
                  clouds.RandomRotate(),
                  clouds.Normalization(chunk_size),
@@ -182,11 +184,16 @@ if __name__ == '__main__':
                 [clouds.Center()],  # val transforms
                 4,  # batch_size
                 True,  # use_cuda
-                1,  # input_channels
+                4,  # input_channels
                 True,  # use_big
                 0,  # random_seed
                 '/u/jklimesch/thesis/gt/gt_ensembles/ads/',  # val_path
                 False,  # track_running_stats
-                False   # validation
+                False,  # validation
+                {'hc': np.array([1, 0, 0, 0]),
+                 'mi': np.array([0, 1, 0, 0]),
+                 'vc': np.array([0, 0, 1, 0]),
+                 'syn': np.array([0, 0, 0, 1])
+                 }  # features
                 ]
         training_thread(args)
