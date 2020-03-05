@@ -2,7 +2,6 @@ import os
 import torch
 import random
 import pickle
-import ipdb
 import warnings
 import numpy as np
 from torch import nn
@@ -10,12 +9,10 @@ from datetime import date
 from syconn.mp import batchjob_utils as qu
 import morphx.processing.clouds as clouds
 from morphx.data.torchhandler import TorchHandler
-from morphx.data.chunkhandler import ChunkHandler
 from morphx.postprocessing.mapping import PredictionMapper
 from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
-
 elektronn3.select_mpl_backend('Agg')
 from elektronn3.models.convpoint import SegSmall, SegBig
 from elektronn3.training import Trainer3d, Backup
@@ -72,6 +69,9 @@ def training_thread(args):
     trs = args[14]
     validation = args[15]
     obj_feats = args[16]
+    tech_density = args[17]
+    bio_density = args[18]
+    density_mode = args[19]
 
     # define other parameters
     lr = 1e-3
@@ -84,7 +84,6 @@ def training_thread(args):
     torch.manual_seed(random_seed)
     np.random.seed(random_seed)
     random.seed(random_seed)
-
     args_cache = args.copy()
 
     if use_cuda:
@@ -92,19 +91,18 @@ def training_thread(args):
     else:
         device = torch.device('cpu')
 
-    # create network and dataset
+    # load model
     if use_big:
         model = SegBig(input_channels, nclasses, trs=trs)
     else:
         model = SegSmall(input_channels, nclasses)
-
     if use_cuda:
         if torch.cuda.device_count() > 1:
             batch_size = batch_size * torch.cuda.device_count()
             model = nn.DataParallel(model)
         model.to(device)
 
-    # Example for a model-compatible input.
+    # set up jit tracing
     example_pts = torch.ones(16, 1000, 3).to(device)
     example_feats = torch.ones(16, 1000, 1).to(device)
     if jit:
@@ -113,13 +111,15 @@ def training_thread(args):
             warnings.simplefilter("ignore")
             tracedmodel = torch.jit.trace(model, (example_feats, example_pts))
 
-    train_transform = clouds.Compose(train_transforms)
-    train_ds = TorchHandler(train_path, radius, npoints, nclasses, train_transform, obj_feats=obj_feats)
-
+    # set up environment
+    train_transforms = clouds.Compose(train_transforms)
+    train_ds = TorchHandler(train_path, npoints, nclasses, density_mode=density_mode, bio_density=bio_density,
+                            tech_density=tech_density, transform=train_transforms, obj_feats=obj_feats)
     if validation:
-        val_transform = clouds.Compose(val_transforms)
-        val_ds = ChunkHandler(val_path, radius, npoints, val_transform, specific=True, obj_feats=obj_feats)
-        pm = PredictionMapper(val_path, save_root + 'validation/' + name + '/', radius)
+        val_transforms = clouds.Compose(val_transforms)
+        val_ds = TorchHandler(val_path, npoints, nclasses, density_mode=True, bio_density=bio_density,
+                              tech_density=tech_density, transform=val_transforms, specific=True, obj_feats=obj_feats)
+        pm = PredictionMapper(val_path, f'{save_root}validation/{name}/d{bio_density}')
     else:
         val_ds = None
         pm = None
@@ -127,11 +127,9 @@ def training_thread(args):
     # initialize optimizer, scheduler, loss and trainer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-
     criterion = torch.nn.CrossEntropyLoss()
     if use_cuda:
         criterion.cuda()
-
     trainer = Trainer3d(
         model=model,
         criterion=criterion,
@@ -161,18 +159,17 @@ def training_thread(args):
 
 
 if __name__ == '__main__':
-
     multi = False
-
     if multi:
         global_params.wd = "/u/jklimesch/thesis/trainings/mp/"
         start_trainings()
     else:
+        # to be compatible with multiprocessing, all parameters must be handed over as list
         today = date.today().strftime("%Y_%m_%d")
         chunk_size = 15000
         sample_num = 15000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
-                '/u/jklimesch/thesis/gt/gt_meshsets/voxeled_old/',  # train_path
+                '/u/jklimesch/thesis/gt/gt_meshsets/voxeled/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
                 today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
@@ -193,7 +190,10 @@ if __name__ == '__main__':
                 {'hc': np.array([1, 0, 0, 0]),
                  'mi': np.array([0, 1, 0, 0]),
                  'vc': np.array([0, 0, 1, 0]),
-                 'syn': np.array([0, 0, 0, 1])
-                 }  # features
+                 'sy': np.array([0, 0, 0, 1])
+                 },  # features
+                1500,  # tech_density
+                100,  # bio_density
+                True  # density_mode
                 ]
         training_thread(args)

@@ -114,7 +114,7 @@ class Analyser:
 
             # prepare iteration
             hybrid = morphx.data.basics.load_pkl(file)
-            traverser = hybrid.base_points(min_dist=cloudset.radius_nm * cloudset.radius_factor)
+            traverser = hybrid.base_points(threshold=cloudset.radius_nm * cloudset.radius_factor)
             chunk_num = len(traverser)
 
             self.cloudset.activate_single(hybrid)
@@ -220,7 +220,7 @@ class Analyser:
 
             # prepare hybrid
             hybrid = morphx.data.basics.load_pkl(file)
-            traverser = hybrid.base_points(min_dist=cloudset.radius_nm * cloudset.radius_factor)
+            traverser = hybrid.base_points(threshold=cloudset.radius_nm * cloudset.radius_factor)
             total_chunks += len(traverser)
 
             if to_png:

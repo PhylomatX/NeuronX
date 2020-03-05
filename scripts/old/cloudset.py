@@ -140,7 +140,7 @@ class CloudSet:
 
         self.curr_hybrid = hybrid
         self.curr_hybrid.base_points(method=self.iterator_method,
-                                     min_dist=self.radius_nm_global,
+                                     threshold=self.radius_nm_global,
                                      source=self.global_source)
         self.size_cache = self.size
         self.size = len(self.curr_hybrid.base_points())
@@ -169,7 +169,7 @@ class CloudSet:
             print("Calculating traverser...")
 
         self.curr_hybrid.base_points(method=self.iterator_method,
-                                     min_dist=self.radius_nm_global,
+                                     threshold=self.radius_nm_global,
                                      source=self.global_source)
         if self.label_filter is not None:
             self.curr_hybrid.filter_traverser()

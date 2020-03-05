@@ -96,6 +96,10 @@ def validation_thread(args):
     random_seed = args[11]
     iter_num = args[12]
     obj_feats = args[13]
+    tech_density = args[14]
+    bio_density = args[15]
+    density_mode = args[16]
+    folder = args[17]
 
     # set random seeds to ensure compareability of different trainings
     torch.manual_seed(random_seed)
@@ -107,47 +111,44 @@ def validation_thread(args):
     else:
         device = torch.device('cpu')
 
+    # load model
     if use_big:
         model = SegBig(input_channels, nclasses)
     else:
         model = SegSmall(input_channels, nclasses)
-
     full = torch.load(save_root + name + '/state_dict.pth')
     model.load_state_dict(full['model_state_dict'])
     model.to(device)
-
     # load scripted model
     # model_path = save_root + '/' + name + '/model.pts'
     # model = torch.jit.load(model_path, map_location=device)
-
     model.eval()
 
+    # set up environment
     chunk_times = []
     map_times = []
     model_times = []
-
     transforms = clouds.Compose(transforms)
-    th = TorchHandler(data_path, radius, npoints, nclasses, transform=transforms, specific=True,
-                      obj_feats=obj_feats)
-    pm = PredictionMapper(data_path, save_root + name + '/predictions_tr/', radius)
-
-    info_folder = save_root + name + '/predictions_tr/info/'
+    th = TorchHandler(data_path, npoints, nclasses, density_mode=density_mode, bio_density=bio_density,
+                      tech_density=tech_density, transform=transforms, specific=True, obj_feats=obj_feats)
+    pm = PredictionMapper(data_path, f'{save_root}{name}/{folder}/{radius}', th.splitfile)
+    info_folder = f'{save_root}{name}/{folder}/info/'
     if not os.path.exists(info_folder):
         os.makedirs(info_folder)
-
     with open(info_folder + 'args.pkl', 'wb') as f:
         pickle.dump(args, f)
         f.close()
 
+    # perform validation
     for hc in th.obj_names:
         chunk_timing, model_timing, map_timing = \
             validate_single(th, hc, batch_size, npoints, iter_num, device, model, pm, input_channels)
         chunk_times.append(chunk_timing)
         model_times.append(model_timing)
         map_times.append(map_timing)
-
     pm.save_prediction()
 
+    # save timing results
     with open(info_folder + 'timing.txt', 'w') as f:
         f.write('\nModel timing:\n\n')
         for idx, item in enumerate(th.obj_names):
@@ -163,14 +164,14 @@ def validation_thread(args):
 
 if __name__ == '__main__':
     chunk_size = 15000
-    sample_num = 20000
+    sample_num = 15000
     args = ['/u/jklimesch/thesis/trainings/current/',                   # save_root
-            '/u/jklimesch/thesis/gt/gt_ensembles/ads/',                 # data path
+            '/u/jklimesch/thesis/gt/gt_meshsets/voxeled/',              # data path
             chunk_size,                                                 # radius
             sample_num,                                                 # npoints
-            '2020_02_20_' + '{}'.format(chunk_size) +
+            '2020_02_25_' + '{}'.format(chunk_size) +
             '_{}'.format(sample_num),                                   # name
-            3,                                                          # nclasses
+            7,                                                          # nclasses
             [clouds.Normalization(chunk_size), clouds.Center()],
             4,                                                          # batch_size
             True,                                                       # use_cuda
@@ -181,8 +182,11 @@ if __name__ == '__main__':
             {'hc': np.array([1, 0, 0, 0]),
              'mi': np.array([0, 1, 0, 0]),
              'vc': np.array([0, 0, 1, 0]),
-             'syn': np.array([0, 0, 0, 1])
-             }                                                          # features
+             'sy': np.array([0, 0, 0, 1])
+             },                                                         # features
+            1500,                                                       # tech_density
+            100,                                                        # bio_density
+            True,                                                       # density_mode
+            'predictions_tr'                                            # folder
             ]
-
     validation_thread(args)
