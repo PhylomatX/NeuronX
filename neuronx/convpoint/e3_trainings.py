@@ -72,12 +72,16 @@ def training_thread(args):
     tech_density = args[17]
     bio_density = args[18]
     density_mode = args[19]
+    val_iter = args[20]
+    val_freq = args[21]
+    normalization = args[22]
+    max_steps = args[23]
 
     # define other parameters
     lr = 1e-3
     lr_stepsize = 1000
     lr_dec = 0.995
-    max_steps = 500000
+    max_steps = int(max_steps / batch_size)
     jit = False
 
     # set random seeds to ensure compareability of different trainings
@@ -113,13 +117,15 @@ def training_thread(args):
 
     # set up environment
     train_transforms = clouds.Compose(train_transforms)
-    train_ds = TorchHandler(train_path, npoints, nclasses, density_mode=density_mode, bio_density=bio_density,
-                            tech_density=tech_density, transform=train_transforms, obj_feats=obj_feats)
+    train_ds = TorchHandler(train_path, npoints, nclasses, density_mode=density_mode, chunk_size=radius,
+                            bio_density=bio_density, tech_density=tech_density, transform=train_transforms,
+                            obj_feats=obj_feats)
     if validation:
         val_transforms = clouds.Compose(val_transforms)
-        val_ds = TorchHandler(val_path, npoints, nclasses, density_mode=True, bio_density=bio_density,
-                              tech_density=tech_density, transform=val_transforms, specific=True, obj_feats=obj_feats)
-        pm = PredictionMapper(val_path, f'{save_root}validation/{name}/d{bio_density}')
+        val_ds = TorchHandler(val_path, npoints, nclasses, density_mode=density_mode, chunk_size=radius,
+                              bio_density=bio_density, tech_density=tech_density, transform=val_transforms,
+                              specific=True, obj_feats=obj_feats)
+        pm = PredictionMapper(val_path, f'{save_root}validation/{name}/', splitfile=val_ds.splitfile)
     else:
         val_ds = None
         pm = None
@@ -137,7 +143,9 @@ def training_thread(args):
         device=device,
         train_dataset=train_ds,
         valid_dataset=val_ds,
-        val_freq=10,
+        val_freq=val_freq,
+        val_iter=val_iter,
+        channel_num=input_channels,
         pred_mapper=pm,
         batchsize=batch_size,
         num_workers=0,
@@ -166,34 +174,41 @@ if __name__ == '__main__':
     else:
         # to be compatible with multiprocessing, all parameters must be handed over as list
         today = date.today().strftime("%Y_%m_%d")
-        chunk_size = 15000
-        sample_num = 15000
+        chunk_size = 25000
+        normalization = 15000
+        bio_density = 100
+        sample_num = 28000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
-                '/u/jklimesch/thesis/gt/gt_meshsets/voxeled/',  # train_path
+                '/u/jklimesch/thesis/gt/20_02_20/poisson/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
-                today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
+                today + '_{}'.format(chunk_size) + '_{}_euclid'.format(sample_num),  # name
                 7,  # nclasses
                 [clouds.RandomVariation((-50, 50)),
                  clouds.RandomRotate(),
-                 clouds.Normalization(chunk_size),
+                 clouds.Normalization(normalization),
                  clouds.Center()],
-                [clouds.Center()],  # val transforms
-                4,  # batch_size
+                [clouds.Normalization(normalization),
+                 clouds.Center()],  # val transforms
+                8,  # batch_size
                 True,  # use_cuda
                 4,  # input_channels
                 True,  # use_big
                 0,  # random_seed
-                '/u/jklimesch/thesis/gt/gt_ensembles/ads/',  # val_path
+                '/u/jklimesch/thesis/gt/20_02_20/poisson/validation/',  # val_path
                 False,  # track_running_stats
-                False,  # validation
+                True,  # validation
                 {'hc': np.array([1, 0, 0, 0]),
                  'mi': np.array([0, 1, 0, 0]),
                  'vc': np.array([0, 0, 1, 0]),
                  'sy': np.array([0, 0, 0, 1])
                  },  # features
                 1500,  # tech_density
-                100,  # bio_density
-                True  # density_mode
+                bio_density,  # bio_density
+                False,  # density_mode
+                1,  # validation iterations
+                20,  # validation frequency
+                normalization,  # normalization parameter
+                300000  # max_stepsize
                 ]
         training_thread(args)

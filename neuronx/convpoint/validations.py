@@ -81,7 +81,6 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
 
 def validation_thread(args):
     """ Can be used for parallel validations using the multiprocessing framework from SyConn. """
-
     save_root = os.path.expanduser(args[0])
     data_path = os.path.expanduser(args[1])
     radius = args[2]
@@ -128,10 +127,11 @@ def validation_thread(args):
     chunk_times = []
     map_times = []
     model_times = []
+    total_times = []
     transforms = clouds.Compose(transforms)
     th = TorchHandler(data_path, npoints, nclasses, density_mode=density_mode, bio_density=bio_density,
                       tech_density=tech_density, transform=transforms, specific=True, obj_feats=obj_feats)
-    pm = PredictionMapper(data_path, f'{save_root}{name}/{folder}/{radius}', th.splitfile)
+    pm = PredictionMapper(data_path, f'{save_root}{name}/{folder}/', th.splitfile)
     info_folder = f'{save_root}{name}/{folder}/info/'
     if not os.path.exists(info_folder):
         os.makedirs(info_folder)
@@ -141,12 +141,15 @@ def validation_thread(args):
 
     # perform validation
     for hc in th.obj_names:
+        start = time.time()
         chunk_timing, model_timing, map_timing = \
             validate_single(th, hc, batch_size, npoints, iter_num, device, model, pm, input_channels)
+        total_timing = time.time() - start
+        total_times.append(total_timing)
         chunk_times.append(chunk_timing)
         model_times.append(model_timing)
         map_times.append(map_timing)
-    pm.save_prediction()
+    pm.save_prediction(hc)
 
     # save timing results
     with open(info_folder + 'timing.txt', 'w') as f:
@@ -159,21 +162,24 @@ def validation_thread(args):
         f.write('\nMapping timing:\n\n')
         for idx, item in enumerate(th.obj_names):
             f.write(f'{item}: \t\t {map_times[idx]} s.\n')
+        f.write('\nTotal timing:\n\n')
+        for idx, item in enumerate(th.obj_names):
+            f.write(f'{item}: \t\t {total_times[idx]} s.\n')
         f.close()
 
 
 if __name__ == '__main__':
     chunk_size = 15000
-    sample_num = 15000
-    args = ['/u/jklimesch/thesis/trainings/current/',                   # save_root
-            '/u/jklimesch/thesis/gt/gt_meshsets/voxeled/',              # data path
+    sample_num = 28000
+    normalization = 100000
+    args = ['/u/jklimesch/thesis/trainings/past/param_search_1/',        # save_root
+            '/u/jklimesch/thesis/gt/20_02_20/poisson/',                 # data path
             chunk_size,                                                 # radius
             sample_num,                                                 # npoints
-            '2020_02_25_' + '{}'.format(chunk_size) +
-            '_{}'.format(sample_num),                                   # name
+            '2020_03_07_20_28000',                                      # name
             7,                                                          # nclasses
-            [clouds.Normalization(chunk_size), clouds.Center()],
-            4,                                                          # batch_size
+            [clouds.Normalization(normalization), clouds.Center()],
+            8,                                                          # batch_size
             True,                                                       # use_cuda
             4,                                                          # input_channels
             True,                                                       # use_big
@@ -185,8 +191,8 @@ if __name__ == '__main__':
              'sy': np.array([0, 0, 0, 1])
              },                                                         # features
             1500,                                                       # tech_density
-            100,                                                        # bio_density
+            20,                                                         # bio_density
             True,                                                       # density_mode
-            'predictions_tr'                                            # folder
+            'predictions_tr'                                           # folder
             ]
     validation_thread(args)

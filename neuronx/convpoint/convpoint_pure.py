@@ -27,8 +27,8 @@ class Monitor(Thread):
 
 input_channels = 4
 nclasses = 7
-batch_size = 4
-npoints = 60000
+batch_size = 8
+npoints = 28000
 
 # Instantiate monitor with a 10-second delay between updates
 monitor = Monitor(0.1)
