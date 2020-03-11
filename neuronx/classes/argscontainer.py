@@ -34,6 +34,7 @@ class ArgsContainer(object):
         self._train_path = os.path.expanduser(train_path)
         self._name = name
         self._val_save_path = f'{self._save_root}validation/{name}/'
+        self._val_info_path = f'{self._val_save_path}info/'
         self._train_save_path = f'{self._save_root}{name}/'
 
         self._class_num = class_num
@@ -87,7 +88,6 @@ class ArgsContainer(object):
                         valid = True
                 if not valid:
                     raise ValueError("Validation transforms have no Center transform, but training has.")
-
 
         self._use_cuda = use_cuda
         self._use_big = use_big
@@ -179,7 +179,7 @@ class ArgsContainer(object):
 
     @property
     def density_mode(self):
-        return self.density_mode
+        return self._density_mode
 
     @property
     def val_iter(self):
@@ -193,12 +193,35 @@ class ArgsContainer(object):
     def max_step_size(self):
         return self._max_step_size
 
+    @property
+    def use_big(self):
+        return self._use_big
+
+    @property
+    def input_channels(self):
+        return self._input_channels
+
+    @property
+    def val_info_path(self):
+        if not os.path.exists(self._val_info_path):
+            os.makedirs(self._val_info_path)
+        return self._val_info_path
+
+    def info2pkl(self, path: str):
+        attr_dict = {'density_mode': self._density_mode, 'chunk_size': self._chunk_size,
+                     'tech_density': self._tech_density, 'bio_density': self._bio_density,
+                     'sample_num': self._sample_num}
+        basics.save2pkl(attr_dict, path, name='argscont')
+
 
 def pkl2container(file: str) -> ArgsContainer:
     args = basics.load_pkl(file)
-    return ArgsContainer(save_root=args[0], train_path=args[1], chunk_size=args[2], sample_num=args[3], name=args[4],
-                         class_num=args[5], train_transforms=args[6], val_transforms=args[7], batch_size=args[8],
-                         use_cuda=args[9], input_channels=args[10], use_big=args[11], random_seed=args[12],
-                         val_path=args[13], track_running_stats=args[14], use_val=args[15], features=args[16],
-                         tech_density=args[17], bio_density=args[18], density_mode=args[19], val_iter=args[20],
-                         val_freq=args[21], max_step_size=args[23])
+    slashs = [pos for pos, char in enumerate(file) if char == '/']
+    current_save_root = file[:slashs[-2]+1]
+
+    return ArgsContainer(save_root=current_save_root, train_path=args[1], chunk_size=args[2], sample_num=args[3],
+                         name=args[4], class_num=args[5], train_transforms=args[6], val_transforms=args[7],
+                         batch_size=args[8], use_cuda=args[9], input_channels=args[10], use_big=args[11],
+                         random_seed=args[12], val_path=args[13], track_running_stats=args[14], use_val=args[15],
+                         features=args[16], tech_density=args[17], bio_density=args[18], density_mode=args[19],
+                         val_iter=args[20], val_freq=args[21], max_step_size=args[23])

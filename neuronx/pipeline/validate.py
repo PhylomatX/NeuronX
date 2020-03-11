@@ -3,7 +3,7 @@ import math
 import torch
 import time
 import random
-import pickle
+import ipdb
 import numpy as np
 from tqdm import tqdm
 from morphx.processing import clouds
@@ -11,6 +11,7 @@ from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegSmall, SegBig
+from neuronx.classes.argscontainer import ArgsContainer, pkl2container
 
 
 def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
@@ -79,48 +80,30 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
     return chunk_timing / chunk_factor, model_timing / (iter_num * batch_num), map_timing / map_factor
 
 
-def validation_thread(args):
-    """ Can be used for parallel validations using the multiprocessing framework from SyConn. """
-    save_root = os.path.expanduser(args[0])
-    data_path = os.path.expanduser(args[1])
-    radius = args[2]
-    npoints = args[3]
-    name = args[4]
-    nclasses = args[5]
-    transforms = args[6]
-    batch_size = args[7]
-    use_cuda = args[8]
-    input_channels = args[9]
-    use_big = args[10]
-    random_seed = args[11]
-    iter_num = args[12]
-    obj_feats = args[13]
-    tech_density = args[14]
-    bio_density = args[15]
-    density_mode = args[16]
-    folder = args[17]
-
+def validation(argscont: ArgsContainer):
     # set random seeds to ensure compareability of different trainings
-    torch.manual_seed(random_seed)
-    np.random.seed(random_seed)
-    random.seed(random_seed)
+    torch.manual_seed(argscont.random_seed)
+    np.random.seed(argscont.random_seed)
+    random.seed(argscont.random_seed)
 
-    if use_cuda:
+    if argscont.use_cuda:
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
 
     # load model
-    if use_big:
-        model = SegBig(input_channels, nclasses)
+    if argscont.use_big:
+        model = SegBig(argscont.input_channels, argscont.class_num)
     else:
-        model = SegSmall(input_channels, nclasses)
-    full = torch.load(save_root + name + '/state_dict.pth')
+        model = SegSmall(argscont.input_channels, argscont.class_num)
+    full = torch.load(argscont.train_save_path + 'state_dict.pth')
     model.load_state_dict(full['model_state_dict'])
     model.to(device)
+
     # load scripted model
     # model_path = save_root + '/' + name + '/model.pts'
     # model = torch.jit.load(model_path, map_location=device)
+
     model.eval()
 
     # set up environment
@@ -128,31 +111,29 @@ def validation_thread(args):
     map_times = []
     model_times = []
     total_times = []
-    transforms = clouds.Compose(transforms)
-    th = TorchHandler(data_path, npoints, nclasses, density_mode=density_mode, bio_density=bio_density,
-                      tech_density=tech_density, transform=transforms, specific=True, obj_feats=obj_feats)
-    pm = PredictionMapper(data_path, f'{save_root}{name}/{folder}/', th.splitfile)
-    info_folder = f'{save_root}{name}/{folder}/info/'
-    if not os.path.exists(info_folder):
-        os.makedirs(info_folder)
-    with open(info_folder + 'args.pkl', 'wb') as f:
-        pickle.dump(args, f)
-        f.close()
+    transforms = clouds.Compose(argscont.val_transforms)
+    th = TorchHandler(argscont.val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
+                      bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
+                      specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size)
+    pm = PredictionMapper(argscont.val_path, argscont.val_save_path, th.splitfile)
 
     # perform validation
+    hc = None
     for hc in th.obj_names:
         start = time.time()
         chunk_timing, model_timing, map_timing = \
-            validate_single(th, hc, batch_size, npoints, iter_num, device, model, pm, input_channels)
+            validate_single(th, hc, argscont.batch_size, argscont.sample_num, argscont.val_iter, device, model, pm,
+                            argscont.input_channels)
         total_timing = time.time() - start
         total_times.append(total_timing)
         chunk_times.append(chunk_timing)
         model_times.append(model_timing)
         map_times.append(map_timing)
-    pm.save_prediction(hc)
+    if hc is not None:
+        pm.save_prediction(hc)
 
     # save timing results
-    with open(info_folder + 'timing.txt', 'w') as f:
+    with open(argscont.val_info_path + 'timing.txt', 'w') as f:
         f.write('\nModel timing:\n\n')
         for idx, item in enumerate(th.obj_names):
             f.write(f'{item}: \t\t {model_times[idx]} s.\n')
@@ -167,32 +148,25 @@ def validation_thread(args):
             f.write(f'{item}: \t\t {total_times[idx]} s.\n')
         f.close()
 
+    argscont.info2pkl(argscont.val_info_path)
+
+    # free CUDA memory
+    del model
+    torch.cuda.empty_cache()
+
+
+def validate_training_set(set_path: str):
+    set_path = os.path.expanduser(set_path)
+    dirs = os.listdir(set_path)
+    for di in dirs:
+        try:
+            argscont = pkl2container(set_path + di + '/training_args.pkl')
+        except FileNotFoundError:
+            continue
+        except NotADirectoryError:
+            continue
+        validation(argscont)
+
 
 if __name__ == '__main__':
-    chunk_size = 15000
-    sample_num = 28000
-    normalization = 100000
-    args = ['/u/jklimesch/thesis/trainings/past/param_search_1/',        # save_root
-            '/u/jklimesch/thesis/gt/20_02_20/poisson/',                 # data path
-            chunk_size,                                                 # radius
-            sample_num,                                                 # npoints
-            '2020_03_07_20_28000',                                      # name
-            7,                                                          # nclasses
-            [clouds.Normalization(normalization), clouds.Center()],
-            8,                                                          # batch_size
-            True,                                                       # use_cuda
-            4,                                                          # input_channels
-            True,                                                       # use_big
-            0,                                                          # random_seed
-            1,                                                          # iteration number
-            {'hc': np.array([1, 0, 0, 0]),
-             'mi': np.array([0, 1, 0, 0]),
-             'vc': np.array([0, 0, 1, 0]),
-             'sy': np.array([0, 0, 0, 1])
-             },                                                         # features
-            1500,                                                       # tech_density
-            20,                                                         # bio_density
-            True,                                                       # density_mode
-            'predictions_tr'                                           # folder
-            ]
-    validation_thread(args)
+    validate_training_set('/u/jklimesch/thesis/trainings/past/param_search_2/')

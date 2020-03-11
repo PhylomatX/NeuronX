@@ -174,10 +174,10 @@ if __name__ == '__main__':
     else:
         # to be compatible with multiprocessing, all parameters must be handed over as list
         today = date.today().strftime("%Y_%m_%d")
-        chunk_size = 25000
+        chunk_size = 15000
         normalization = 15000
         bio_density = 100
-        sample_num = 28000
+        sample_num = 11000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
                 '/u/jklimesch/thesis/gt/20_02_20/poisson/',  # train_path
                 chunk_size,  # radius
@@ -190,7 +190,7 @@ if __name__ == '__main__':
                  clouds.Center()],
                 [clouds.Normalization(normalization),
                  clouds.Center()],  # val transforms
-                8,  # batch_size
+                16,  # batch_size
                 True,  # use_cuda
                 4,  # input_channels
                 True,  # use_big
