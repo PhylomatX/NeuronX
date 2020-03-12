@@ -1,5 +1,6 @@
 import os
 import glob
+import ipdb
 from datetime import date
 import numpy as np
 import sklearn.metrics as sm
@@ -7,6 +8,8 @@ from tqdm import tqdm
 from typing import Tuple
 from morphx.processing import objects
 from morphx.data import basics
+import matplotlib.pyplot as plt
+from neuronx.classes.datacontainer import DataContainer
 
 
 def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: str = 'Evaluation',
@@ -186,6 +189,87 @@ def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: boo
     basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + today)
 
 
+def summarize_reports(set_path: str, date: str):
+    set_path = os.path.expanduser(set_path)
+    dirs = os.listdir(set_path)
+    reports = {}
+    for di in dirs:
+        input_path = set_path + di + '/'
+        report = basics.load_pkl(input_path + 'evaluation/eval_' + date + '.pkl')
+        argscont = basics.load_pkl(input_path + 'info/argscont.pkl')
+        report.update(argscont)
+        reports[di] = report
+    basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + date)
+
+
+def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', part_key: str = 'mv',
+                 class_key: str = 'macro avg', metric_key: str = 'f1-score'):
+    """ Extracts the requested metric from the reports file at reports_path and creates a datacontainer
+        which can then be transformed into a diagram.
+
+    Args:
+        reports_path: path to reports file.
+        output_path: pickle file in which datacontainer should get saved.
+        cell_key: Choose between single cells (e.g. 'sso_491527_poisson') or choose 'total'
+        part_key: Choose between mesh (e.g. 'mv') or skeleton (e.g. 'mv_skel')
+        class_key: Chosse between classes (e.g. 'dendrite', 'axon', ...) or averages (e.g. 'accuracy', 'macro avg', ...)
+        metric_key: Choose between metrics (e.g. 'precision', 'f1-score', ...)
+    """
+    reports = basics.load_pkl(reports_path)
+    density_data = {}
+    context_data = {}
+    ipdb.set_trace()
+    metric = ""
+    for key in reports.keys():
+        report = reports[key]
+        density_mode = report['density_mode']
+        sample_num = report['sample_num']
+        metric = report[cell_key][part_key][class_key][metric_key]
+        if density_mode:
+            bio_density = report['bio_density']
+            if sample_num in density_data.keys():
+                density_data[sample_num][0].append(bio_density)
+                density_data[sample_num][1].append(metric)
+            else:
+                density_data[sample_num] = ([bio_density], [metric])
+        else:
+            chunk_size = report['chunk_size']
+            if sample_num in context_data.keys():
+                density_data[sample_num][0].append(chunk_size)
+                density_data[sample_num][1].append(metric)
+            else:
+                density_data[sample_num] = ([chunk_size], [metric])
+    datacont = DataContainer(density_data, context_data, metric=metric)
+    datacont.save2pkl(output_path)
+
+
+def generate_diagram(data_path: str, output_path: str):
+    data = basics.load_pkl(data_path)
+    density_data = data['density_data']
+    context_data = data['context_data']
+
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel('density (point/um²)')
+    ax1.set_ylabel('f1-score')
+    ax2 = ax1.twiny()
+    ax2.set_xlabel('context size (um²)')
+
+    colors = ['b', 'r', 'g', 'b', 'y', 'c', 'm']
+
+    for ix, key in enumerate(density_data):
+        densities = np.array(density_data[key][0])
+        metrics = np.array(density_data[key][1])
+        ax1.scatter(densities, metrics, c=colors[ix], marker='o', label=str(key))
+
+    for ix, key in enumerate(context_data):
+        context_sizes = np.array(context_data[key][0])
+        metrics = np.array(context_data[key][1])
+        ax2.scatter(context_sizes, metrics, c=colors[ix], marker='x', label=str(key))
+
+    plt.grid()
+    ax1.legend(loc='best')
+    plt.tight_layout()
+    plt.savefig(output_path)
 
 
 if __name__ == '__main__':

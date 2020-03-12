@@ -174,15 +174,15 @@ if __name__ == '__main__':
     else:
         # to be compatible with multiprocessing, all parameters must be handed over as list
         today = date.today().strftime("%Y_%m_%d")
-        chunk_size = 15000
-        normalization = 15000
-        bio_density = 100
+        chunk_size = 2000
+        normalization = 100000
+        bio_density = 50
         sample_num = 11000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
                 '/u/jklimesch/thesis/gt/20_02_20/poisson/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
-                today + '_{}'.format(chunk_size) + '_{}_euclid'.format(sample_num),  # name
+                today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
                 7,  # nclasses
                 [clouds.RandomVariation((-50, 50)),
                  clouds.RandomRotate(),
@@ -205,7 +205,7 @@ if __name__ == '__main__':
                  },  # features
                 1500,  # tech_density
                 bio_density,  # bio_density
-                False,  # density_mode
+                True,  # density_mode
                 1,  # validation iterations
                 20,  # validation frequency
                 normalization,  # normalization parameter
