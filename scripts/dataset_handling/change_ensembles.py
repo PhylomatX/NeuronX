@@ -2,7 +2,6 @@ import os
 import glob
 import numpy as np
 from tqdm import tqdm
-import ipdb
 from morphx.processing import ensembles, clouds, objects
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.classes.cloudensemble import CloudEnsemble
@@ -127,14 +126,17 @@ def transfer_skeleton(origin: str, target: str, output: str):
         objects.save2pkl(ce, output, name=name)
 
 
+def generate_verts2node(input_path: str, output_path: str):
+    input_path = os.path.expanduser(input_path)
+    output_path = os.path.expanduser(output_path)
+    files = glob.glob(input_path + '*.pkl')
+    for file in tqdm(files):
+        slashs = [pos for pos, char in enumerate(file) if char == '/']
+        name = file[slashs[-1] + 1:-4]
+        ce = ensembles.ensemble_from_pkl(file)
+        ce.save2pkl(output_path + name + '.pkl')
+
+
 if __name__ == '__main__':
-    # transfer_poisson('/u/jklimesch/gt/gt_poisson/',
-    #                  '/u/jklimesch/gt/gt_ensembles/raw/',
-    #                  '/u/jklimesch/gt/gt_ensembles/')
-    # cell2hc('/u/jklimesch/thesis/gt/gt_ensembles/', '/u/jklimesch/thesis/gt/gt_ensembles/')
-    # transfer_skeleton('/u/jklimesch/thesis/gt/gt_poisson/', '/u/jklimesch/thesis/gt/gt_ensembles/',
-    #                   '/u/jklimesch/thesis/gt/gt_ensembles/')
-    # add_features('/u/jklimesch/thesis/gt/gt_ensembles/', '/u/jklimesch/thesis/gt/gt_ensembles/')
-    # create_ads('/u/jklimesch/thesis/gt/gt_ensembles/', '/u/jklimesch/thesis/gt/gt_ensembles/ads/')
-    update_saving_standard('/u/jklimesch/thesis/gt/gt_ensembles/ads/old_standard/',
-                           '/u/jklimesch/thesis/gt/gt_ensembles/ads/')
+    generate_verts2node('~/thesis/gt/20_02_20/poisson_verts2node/',
+                        '~/thesis/gt/20_02_20/poisson_verts2node/')

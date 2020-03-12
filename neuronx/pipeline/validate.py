@@ -3,7 +3,6 @@ import math
 import torch
 import time
 import random
-import ipdb
 import numpy as np
 from tqdm import tqdm
 from morphx.processing import clouds
@@ -80,7 +79,9 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
     return chunk_timing / chunk_factor, model_timing / (iter_num * batch_num), map_timing / map_factor
 
 
-def validation(argscont: ArgsContainer):
+def validation(argscont: ArgsContainer, val_path: str):
+    val_path = os.path.expanduser(val_path)
+
     # set random seeds to ensure compareability of different trainings
     torch.manual_seed(argscont.random_seed)
     np.random.seed(argscont.random_seed)
@@ -112,10 +113,10 @@ def validation(argscont: ArgsContainer):
     model_times = []
     total_times = []
     transforms = clouds.Compose(argscont.val_transforms)
-    th = TorchHandler(argscont.val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
+    th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
                       specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size)
-    pm = PredictionMapper(argscont.val_path, argscont.val_save_path, th.splitfile)
+    pm = PredictionMapper(val_path, argscont.val_save_path, th.splitfile)
 
     # perform validation
     hc = None
@@ -155,7 +156,13 @@ def validation(argscont: ArgsContainer):
     torch.cuda.empty_cache()
 
 
-def validate_training_set(set_path: str):
+def validate_training_set(set_path: str, val_path: str):
+    """ Validate multiple trainings.
+
+    Args:
+        set_path: path where the trainings are located.
+        val_path: path to cell files on which the trained models should get validated.
+    """
     set_path = os.path.expanduser(set_path)
     dirs = os.listdir(set_path)
     for di in dirs:
@@ -165,7 +172,7 @@ def validate_training_set(set_path: str):
             continue
         except NotADirectoryError:
             continue
-        validation(argscont)
+        validation(argscont, val_path)
 
 
 if __name__ == '__main__':

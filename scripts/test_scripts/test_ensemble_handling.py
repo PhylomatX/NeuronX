@@ -1,4 +1,3 @@
-import ipdb
 from tqdm import tqdm
 from morphx.data.chunkhandler import ChunkHandler
 from morphx.processing import clouds, objects
@@ -18,7 +17,6 @@ for ix in tqdm(range(len(ch))):
         total = chunk
     else:
         total = clouds.merge_clouds([total, chunk])
-    ipdb.set_trace()
 objects.save2pkl(total, data_path + 'test_chunks_new/', name='total')
 
 

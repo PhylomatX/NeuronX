@@ -10,7 +10,10 @@ from morphx.processing import objects
 from morphx.data import basics
 import matplotlib.pyplot as plt
 from neuronx.classes.datacontainer import DataContainer
+from neuronx.pipeline import validate as val
 
+
+# -------------------------------------- EVALUATION METHODS ------------------------------------------- #
 
 def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: str = 'Evaluation',
                  total: bool = False, direct: bool = False, filters: bool = False, drop_unpreds: bool = True,
@@ -125,6 +128,7 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     reports = {}
     reports_txt = ""
     # Perform majority vote on existing predictions and set these as new labels
+    print("\n\nEvaluate - preds2labels")
     if direct:
         obj.preds2labels(False)
         mode = 'd'
@@ -132,6 +136,7 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
         obj.preds2labels()
         mode = 'mv'
     # Get evaluation for vertices
+    print("Evaluate - preds2labels")
     gtl, hcl = handle_unpreds(gt_hc.labels, hc.labels, drop_unpreds)
 
     targets = get_target_names(gtl, hcl, target_names)
@@ -143,7 +148,9 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     if filters:
         hc.clean_node_labels()
         mode += '_f'
+    print("Evaluate - node_labels")
     gtnl, hcnl = handle_unpreds(gt_hc.node_labels, hc.node_labels, drop_unpreds)
+    print("Evaluate - node_labels")
     targets = get_target_names(gtnl, hcnl, target_names)
     reports[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
     reports_txt += mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
@@ -156,29 +163,16 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     return reports, reports_txt
 
 
-def handle_unpreds(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
-    if drop:
-        mask = np.logical_and(hc != -1, gt != -1)
-        return gt[mask], hc[mask]
-    else:
-        return gt, hc
-
-
-def get_target_names(gtl: np.ndarray, hcl: np.ndarray, target_names: list) -> list:
-    target_names = np.array(target_names)
-    total = np.unique(np.concatenate((gtl, hcl), axis=0)).astype(int)
-    return list(target_names[total])
-
-
 def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: bool = False, filters: bool = False,
                             drop_unpreds: bool = True, data_type: str = 'ce'):
+    """ Evaluates validations from multiple trainings. """
     set_path = os.path.expanduser(set_path)
     gt_path = os.path.expanduser(gt_path)
     dirs = os.listdir(set_path)
     today = date.today().strftime("%Y_%m_%d")
     target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     reports = {}
-    for di in dirs:
+    for di in tqdm(dirs):
         input_path = set_path + di + '/'
         report = eval_dataset(input_path, gt_path, input_path + 'evaluation/', total=total, direct=direct,
                               filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
@@ -189,17 +183,38 @@ def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: boo
     basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + today)
 
 
-def summarize_reports(set_path: str, date: str):
+# -------------------------------------- HELPER METHODS ------------------------------------------- #
+
+def handle_unpreds(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
+    """ Removes labels which equal -1. """
+    if drop:
+        mask = np.logical_and(hc != -1, gt != -1)
+        return gt[mask], hc[mask]
+    else:
+        return gt, hc
+
+
+def get_target_names(gtl: np.ndarray, hcl: np.ndarray, target_names: list) -> list:
+    """ Extracts the names of the labels which appear in gtl and hcl. """
+    target_names = np.array(target_names)
+    total = np.unique(np.concatenate((gtl, hcl), axis=0)).astype(int)
+    return list(target_names[total])
+
+
+# -------------------------------------- REPORT HANDLING ------------------------------------------- #
+
+def summarize_reports(set_path: str, eval_date: str):
+    """ Combines all reports on individual training level to a single report on training set level. """
     set_path = os.path.expanduser(set_path)
     dirs = os.listdir(set_path)
     reports = {}
     for di in dirs:
         input_path = set_path + di + '/'
-        report = basics.load_pkl(input_path + 'evaluation/eval_' + date + '.pkl')
+        report = basics.load_pkl(input_path + 'evaluation/eval_' + eval_date + '.pkl')
         argscont = basics.load_pkl(input_path + 'info/argscont.pkl')
         report.update(argscont)
         reports[di] = report
-    basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + date)
+    basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + eval_date)
 
 
 def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', part_key: str = 'mv',
@@ -218,7 +233,6 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
     reports = basics.load_pkl(reports_path)
     density_data = {}
     context_data = {}
-    ipdb.set_trace()
     metric = ""
     for key in reports.keys():
         report = reports[key]
@@ -243,7 +257,33 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
     datacont.save2pkl(output_path)
 
 
-def generate_diagram(data_path: str, output_path: str):
+# -------------------------------------- PIPELINE METHODS ------------------------------------------- #
+
+def full_evaluation_pipe(set_path: str, val_path, total=True, direct: bool = False, filters: bool = False,
+                         drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
+                         part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score'):
+    """ Runs validations, evaluates them and transforms the results of these evaluations into a diagram. """
+    today = date.today().strftime("%Y_%m_%d")
+    set_path = os.path.expanduser(set_path)
+    # run validations
+    val.validate_training_set(set_path, val_path)
+    # evaluate validations
+    new_set_path = set_path + 'validation/'
+    evaluate_validation_set(new_set_path, val_path, total, direct, filters, drop_unpreds, data_type)
+    # tranform reports to data
+    new_set_path = set_path + 'validation/evaluation/'
+    data_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_data.pkl'
+    reports2data(new_set_path + 'eval_' + today + '.pkl',
+                 data_path, cell_key, part_key, class_key, metric_key)
+    # generate diagrams
+    diagram_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_diagram.png'
+    diagram_param_search(data_path, diagram_path)
+
+
+# -------------------------------------- DIAGRAM GENERATION ------------------------------------------- #
+
+def diagram_param_search(data_path: str, output_path: str):
+    """ Generates diagram which visualizes the parameter search. """
     data = basics.load_pkl(data_path)
     density_data = data['density_data']
     context_data = data['context_data']
@@ -273,5 +313,5 @@ def generate_diagram(data_path: str, output_path: str):
 
 
 if __name__ == '__main__':
-    evaluate_validation_set('~/thesis/trainings/past/param_search_2/validation/',
-                            '~/thesis/gt/20_02_20/poisson/validation/', total=True)
+    full_evaluation_pipe('~/thesis/trainings/intermediate/',
+                         '~/thesis/gt/20_02_20/poisson_verts2node/validation/')
