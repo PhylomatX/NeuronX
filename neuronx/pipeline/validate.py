@@ -166,6 +166,9 @@ def validate_training_set(set_path: str, val_path: str):
     set_path = os.path.expanduser(set_path)
     dirs = os.listdir(set_path)
     for di in dirs:
+        if os.path.exists(set_path + 'validation/' + di):
+            print(di + " has already been processed. Skipping...")
+            continue
         try:
             argscont = pkl2container(set_path + di + '/training_args.pkl')
         except FileNotFoundError:

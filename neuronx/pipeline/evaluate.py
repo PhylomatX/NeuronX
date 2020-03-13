@@ -128,7 +128,6 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     reports = {}
     reports_txt = ""
     # Perform majority vote on existing predictions and set these as new labels
-    print("\n\nEvaluate - preds2labels")
     if direct:
         obj.preds2labels(False)
         mode = 'd'
@@ -136,7 +135,6 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
         obj.preds2labels()
         mode = 'mv'
     # Get evaluation for vertices
-    print("Evaluate - preds2labels")
     gtl, hcl = handle_unpreds(gt_hc.labels, hc.labels, drop_unpreds)
 
     targets = get_target_names(gtl, hcl, target_names)
@@ -148,9 +146,7 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     if filters:
         hc.clean_node_labels()
         mode += '_f'
-    print("Evaluate - node_labels")
     gtnl, hcnl = handle_unpreds(gt_hc.node_labels, hc.node_labels, drop_unpreds)
-    print("Evaluate - node_labels")
     targets = get_target_names(gtnl, hcnl, target_names)
     reports[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
     reports_txt += mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
@@ -164,23 +160,27 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
 
 
 def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: bool = False, filters: bool = False,
-                            drop_unpreds: bool = True, data_type: str = 'ce'):
+                            drop_unpreds: bool = True, data_type: str = 'ce',
+                            date: str = date.today().strftime("%Y_%m_%d")):
     """ Evaluates validations from multiple trainings. """
     set_path = os.path.expanduser(set_path)
     gt_path = os.path.expanduser(gt_path)
     dirs = os.listdir(set_path)
-    today = date.today().strftime("%Y_%m_%d")
     target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     reports = {}
     for di in tqdm(dirs):
+        if os.path.exists(set_path + di +'/evaluation'):
+            print(di + " has already been processed. Skipping...")
+            continue
+        print("Processing " + di)
         input_path = set_path + di + '/'
         report = eval_dataset(input_path, gt_path, input_path + 'evaluation/', total=total, direct=direct,
                               filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
-                              report_name='eval_' + today, target_names=target_names)
+                              report_name='eval_' + date, target_names=target_names)
         argscont = basics.load_pkl(input_path + 'info/argscont.pkl')
         report.update(argscont)
         reports[di] = report
-    basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + today)
+    basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + date)
 
 
 # -------------------------------------- HELPER METHODS ------------------------------------------- #
@@ -238,7 +238,7 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
         report = reports[key]
         density_mode = report['density_mode']
         sample_num = report['sample_num']
-        metric = report[cell_key][part_key][class_key][metric_key]
+        metric = report[cell_key][part_key][class_key]
         if density_mode:
             bio_density = report['bio_density']
             if sample_num in density_data.keys():
@@ -249,10 +249,10 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
         else:
             chunk_size = report['chunk_size']
             if sample_num in context_data.keys():
-                density_data[sample_num][0].append(chunk_size)
-                density_data[sample_num][1].append(metric)
+                context_data[sample_num][0].append(chunk_size)
+                context_data[sample_num][1].append(metric)
             else:
-                density_data[sample_num] = ([chunk_size], [metric])
+                context_data[sample_num] = ([chunk_size], [metric])
     datacont = DataContainer(density_data, context_data, metric=metric)
     datacont.save2pkl(output_path)
 
@@ -261,22 +261,23 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
 
 def full_evaluation_pipe(set_path: str, val_path, total=True, direct: bool = False, filters: bool = False,
                          drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
-                         part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score'):
-    """ Runs validations, evaluates them and transforms the results of these evaluations into a diagram. """
-    today = date.today().strftime("%Y_%m_%d")
+                         part_key: str = 'mv', class_key: str = 'accuracy', metric_key: str = 'f1-score'):
+    # """ Runs validations, evaluates them and transforms the results of these evaluations into a diagram. """
+    today = "2020_03_12"
     set_path = os.path.expanduser(set_path)
     # run validations
-    val.validate_training_set(set_path, val_path)
+    # val.validate_training_set(set_path, val_path)
     # evaluate validations
     new_set_path = set_path + 'validation/'
-    evaluate_validation_set(new_set_path, val_path, total, direct, filters, drop_unpreds, data_type)
+    # evaluate_validation_set(new_set_path, val_path, total, direct, filters, drop_unpreds, data_type, date=today)
+    summarize_reports(new_set_path, today)
     # tranform reports to data
     new_set_path = set_path + 'validation/evaluation/'
-    data_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_data.pkl'
+    data_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_data.pkl'
     reports2data(new_set_path + 'eval_' + today + '.pkl',
                  data_path, cell_key, part_key, class_key, metric_key)
     # generate diagrams
-    diagram_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_diagram.png'
+    diagram_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_diagram.png'
     diagram_param_search(data_path, diagram_path)
 
 
@@ -290,25 +291,34 @@ def diagram_param_search(data_path: str, output_path: str):
 
     fig, ax1 = plt.subplots()
     ax1.set_xlabel('density (point/um²)')
-    ax1.set_ylabel('f1-score')
+    ax1.set_ylabel('accuracy')
     ax2 = ax1.twiny()
-    ax2.set_xlabel('context size (um²)')
+    ax2.set_xlabel('context size (nm)')
 
     colors = ['b', 'r', 'g', 'b', 'y', 'c', 'm']
+    plots = []
+    labels = []
 
     for ix, key in enumerate(density_data):
         densities = np.array(density_data[key][0])
         metrics = np.array(density_data[key][1])
-        ax1.scatter(densities, metrics, c=colors[ix], marker='o', label=str(key))
+        plot = ax1.scatter(densities, metrics, c=colors[ix], marker='o')
+        labels.append("density, " + str(key))
+        plots.append(plot)
 
     for ix, key in enumerate(context_data):
         context_sizes = np.array(context_data[key][0])
         metrics = np.array(context_data[key][1])
-        ax2.scatter(context_sizes, metrics, c=colors[ix], marker='x', label=str(key))
+        plot = ax2.scatter(context_sizes, metrics, c=colors[ix], marker='x')
+        labels.append("context, " + str(key))
+        plots.append(plot)
 
-    plt.grid()
-    ax1.legend(loc='best')
+    box = ax1.get_position()
+    ax1.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+    ax2.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
     plt.tight_layout()
+    ax1.grid()
+    ax1.legend(plots, labels, loc='lower center', ncol=int(len(labels)/2), title="mode, sample num")
     plt.savefig(output_path)
 
 

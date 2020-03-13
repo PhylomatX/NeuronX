@@ -174,12 +174,12 @@ if __name__ == '__main__':
     else:
         # to be compatible with multiprocessing, all parameters must be handed over as list
         today = date.today().strftime("%Y_%m_%d")
-        chunk_size = 2000
-        normalization = 100000
-        bio_density = 50
-        sample_num = 11000
+        chunk_size = 8000
+        normalization = 8000
+        bio_density = 200
+        sample_num = 60000
         args = ['/u/jklimesch/thesis/trainings/current/',  # save_root
-                '/u/jklimesch/thesis/gt/20_02_20/poisson/',  # train_path
+                '/u/jklimesch/thesis/gt/20_02_20/poisson_verts2node/',  # train_path
                 chunk_size,  # radius
                 sample_num,  # npoints
                 today + '_{}'.format(chunk_size) + '_{}'.format(sample_num),  # name
@@ -190,14 +190,14 @@ if __name__ == '__main__':
                  clouds.Center()],
                 [clouds.Normalization(normalization),
                  clouds.Center()],  # val transforms
-                16,  # batch_size
+                4,  # batch_size
                 True,  # use_cuda
                 4,  # input_channels
                 True,  # use_big
                 0,  # random_seed
-                '/u/jklimesch/thesis/gt/20_02_20/poisson/validation/',  # val_path
+                '/u/jklimesch/thesis/gt/20_02_20/poisson_verts2node/validation/',  # val_path
                 False,  # track_running_stats
-                True,  # validation
+                False,  # validation
                 {'hc': np.array([1, 0, 0, 0]),
                  'mi': np.array([0, 1, 0, 0]),
                  'vc': np.array([0, 0, 1, 0]),
