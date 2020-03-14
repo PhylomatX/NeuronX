@@ -10,7 +10,7 @@ from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegSmall, SegBig
-from neuronx.classes.argscontainer import ArgsContainer, pkl2container
+from neuronx.classes.argscontainer import ArgsContainer, args2container
 
 
 def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
@@ -115,7 +115,8 @@ def validation(argscont: ArgsContainer, val_path: str):
     transforms = clouds.Compose(argscont.val_transforms)
     th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
-                      specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size)
+                      specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size,
+                      label_mappings=argscont.label_mappings)
     pm = PredictionMapper(val_path, argscont.val_save_path, th.splitfile)
 
     # perform validation
@@ -170,7 +171,7 @@ def validate_training_set(set_path: str, val_path: str):
             print(di + " has already been processed. Skipping...")
             continue
         try:
-            argscont = pkl2container(set_path + di + '/training_args.pkl')
+            argscont = args2container(set_path + di + '/training_args.pkl')
         except FileNotFoundError:
             continue
         except NotADirectoryError:

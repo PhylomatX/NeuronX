@@ -1,5 +1,6 @@
 import os
 import time
+import ipdb
 import numpy as np
 from tqdm import tqdm
 from morphx.data.chunkhandler import ChunkHandler
@@ -12,8 +13,11 @@ if __name__ == '__main__':
     sample_num = 28000
     data_path = os.path.expanduser('~/thesis/gt/20_02_20/poisson_verts2node/')
 
+    ipdb.set_trace()
     ch = ChunkHandler(data_path, sample_num, density_mode=True, bio_density=bio_density, tech_density=tech_density,
-                      specific=False)
+                      specific=False, obj_feats={'hc': np.array([1, 0, 0, 0]), 'mi': np.array([0, 1, 0, 0]),
+                                                 'vc': np.array([0, 0, 1, 0]), 'sy': np.array([0, 0, 0, 1])},
+                      label_mappings=[(4, 2), (5, 2), (6, 1)])
     print("Start...")
     times = []
 
