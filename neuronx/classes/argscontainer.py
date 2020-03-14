@@ -260,7 +260,8 @@ class ArgsContainer(object):
         return self
 
 
-def args2container(file: str) -> ArgsContainer:
+def args2container_14(file: str) -> ArgsContainer:
+    """ Provides backward compatibility for trainings started on 2020_03_14"""
     args = basics.load_pkl(file)
     slashs = [pos for pos, char in enumerate(file) if char == '/']
     current_save_root = file[:slashs[-2]+1]
@@ -270,5 +271,18 @@ def args2container(file: str) -> ArgsContainer:
                          batch_size=args[8], use_cuda=args[9], input_channels=args[10], use_big=args[11],
                          random_seed=args[12], val_path=args[13], track_running_stats=args[14], use_val=args[15],
                          features=args[16], tech_density=args[17], bio_density=args[18], density_mode=args[19],
-                         val_iter=args[20], val_freq=args[21], max_step_size=args[23], label_mappings=args[24],
-                         hybrid_mode=args[25])
+                         val_iter=args[20], val_freq=args[21], max_step_size=args[23], label_mappings=args[24])
+
+
+def args2container_13(file: str) -> ArgsContainer:
+    """ Provides backward compatibility for trainings started on or before 2020_03_13"""
+    args = basics.load_pkl(file)
+    slashs = [pos for pos, char in enumerate(file) if char == '/']
+    current_save_root = file[:slashs[-2]+1]
+
+    return ArgsContainer(save_root=current_save_root, train_path=args[1], chunk_size=args[2], sample_num=args[3],
+                         name=args[4], class_num=args[5], train_transforms=args[6], val_transforms=args[7],
+                         batch_size=args[8], use_cuda=args[9], input_channels=args[10], use_big=args[11],
+                         random_seed=args[12], val_path=args[13], track_running_stats=args[14], use_val=args[15],
+                         features=args[16], tech_density=args[17], bio_density=args[18], density_mode=args[19],
+                         val_iter=args[20], val_freq=args[21], max_step_size=args[23])
