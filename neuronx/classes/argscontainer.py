@@ -1,5 +1,6 @@
 import os
 import pickle
+import torch
 from typing import List, Tuple
 from morphx.data import basics
 from morphx.processing import clouds
@@ -31,8 +32,9 @@ class ArgsContainer(object):
                  random_seed: int = 0,
                  use_cuda: bool = True,
                  label_mappings: List[Tuple[int, int]] = None,
-                 hybrid_mode: bool = False
-                 ):
+                 hybrid_mode: bool = False,
+                 optimizer: str = 'adam',
+                 scheduler: str = 'steplr'):
 
         self._save_root = os.path.expanduser(save_root)
         self._train_path = os.path.expanduser(train_path)
@@ -99,6 +101,8 @@ class ArgsContainer(object):
         self._max_step_size = max_step_size
         self._label_mappings = label_mappings
         self._hybrid_mode = hybrid_mode
+        self._optimizer = optimizer
+        self._scheduler = scheduler
 
     @property
     def normalization(self):
@@ -220,6 +224,14 @@ class ArgsContainer(object):
     def hybrid_mode(self):
         return self._hybrid_mode
 
+    @property
+    def optimizer(self):
+        return self._optimizer
+
+    @property
+    def scheduler(self):
+        return self._scheduler
+
     def save2pkl(self, path: str):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -245,7 +257,9 @@ class ArgsContainer(object):
                      'random_seed': self._random_seed,
                      'use_cuda': self._use_cuda,
                      'label_mappings': self._label_mappings,
-                     'hybrid_mode': self._hybrid_mode}
+                     'hybrid_mode': self._hybrid_mode,
+                     'optimizer': self._optimizer,
+                     'scheduler': self._scheduler}
         with open(path, 'wb') as f:
             pickle.dump(attr_dict, f)
 

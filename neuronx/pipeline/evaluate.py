@@ -1,7 +1,5 @@
 import os
 import glob
-import ipdb
-from datetime import date
 import numpy as np
 import sklearn.metrics as sm
 from tqdm import tqdm
@@ -159,22 +157,20 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     return reports, reports_txt
 
 
-def evaluate_validation_set(set_path: str, gt_path: str, out_name: str, total=True, direct: bool = False,
+def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: bool = False,
                             filters: bool = False, drop_unpreds: bool = True, data_type: str = 'ce',
-                            eval_date: str = eval_date.today().strftime("%Y_%m_%d")):
+                            eval_name: str = 'evaluation'):
     """ Evaluates validations from multiple trainings.
 
     Args:
         set_path: path to validation folders
         gt_path: path where gt files corresponding to validation files can be found
-        out_name: name of folder in which evaluation results should get saved. Folders with this name get created in
-            each validation folder and at set level
         total: flag for generating a total evaluation
         direct: flag for taking the predictions without a majority vote
         filters: flag for applying filters to skeleton predictions
         drop_unpreds: flag for removing vertices without predictions
         data_type: type of dataset ('ce' for CloudEnsembles, 'hc' for HybridClouds)
-        eval_date: date of validation
+        eval_name: name of evaluation
     """
     set_path = os.path.expanduser(set_path)
     gt_path = os.path.expanduser(gt_path)
@@ -183,18 +179,18 @@ def evaluate_validation_set(set_path: str, gt_path: str, out_name: str, total=Tr
     reports = {}
     for di in tqdm(dirs):
         di_in_path = set_path + di + '/'
-        di_out_path = set_path + di + '/' + out_name
+        di_out_path = set_path + di + '/' + eval_name
         if os.path.exists(di_out_path):
             print(di + " has already been processed. Skipping...")
             continue
         print("Processing " + di)
         report = eval_dataset(di_in_path, gt_path, di_out_path, total=total, direct=direct,
                               filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
-                              report_name='eval_' + eval_date, target_names=target_names)
+                              report_name=eval_name, target_names=target_names)
         argscont = basics.load_pkl(di_in_path + 'argscont.pkl')
         report.update(argscont)
         reports[di] = report
-    basics.save2pkl(reports, set_path + out_name + '/', name='eval_' + eval_date)
+    basics.save2pkl(reports, set_path + eval_name + '/', name=eval_name)
 
 
 # -------------------------------------- HELPER METHODS ------------------------------------------- #
@@ -252,7 +248,7 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
         report = reports[key]
         density_mode = report['density_mode']
         sample_num = report['sample_num']
-        metric = report[cell_key][part_key][class_key]
+        metric = report[cell_key][part_key][class_key][metric_key]
         if density_mode:
             bio_density = report['bio_density']
             if sample_num in density_data.keys():
@@ -275,7 +271,8 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
 
 def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, direct: bool = False, filters: bool = False,
                          drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
-                         part_key: str = 'mv', class_key: str = 'accuracy', metric_key: str = 'f1-score'):
+                         part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
+                         eval_name: str = 'evaluation'):
     """ Runs full pipeline on given training set (including validation, evaluation and diagram generation.
 
     Args:
@@ -283,22 +280,31 @@ def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, direct: 
             either argscont.pkl or training_args.pkl.
         val_path: path to cell pickle files which should get used for validation and evaluation.
         out_path: path where evaluation results should get saved.
+        total:
+        direct:
+        filters:
+        drop_unpreds:
+        data_type:
+        class_key:
+        part_key:
+        metric_key:
+        cell_key:
+        eval_name:
     """
-    # """ Runs validations, evaluates them and transforms the results of these evaluations into a diagram. """
-    today = date.today().strftime("%Y_%m_%d")
     set_path = os.path.expanduser(set_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
     # run validations
     val.validate_training_set(set_path, val_path, out_path)
     # evaluate validations
-    evaluate_validation_set(out_path, val_path, total, direct, filters, drop_unpreds, data_type, eval_date=today)
+    evaluate_validation_set(out_path, val_path, total, direct, filters, drop_unpreds, data_type,
+                            eval_name=eval_name)
     # tranform reports to data
-    new_set_path = set_path + 'validation/evaluation/'
-    data_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_data.pkl'
-    reports2data(new_set_path + 'eval_' + today + '.pkl', data_path, cell_key, part_key, class_key, metric_key)
+    reports_path = out_path + eval_name + '/'
+    data_path = reports_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_data.pkl'
+    reports2data(reports_path + eval_name + '.pkl', data_path, cell_key, part_key, class_key, metric_key)
     # generate diagrams
-    diagram_path = new_set_path + f'{cell_key}_{part_key}_{class_key}_diagram.png'
+    diagram_path = reports_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_diagram.png'
     diagram_param_search(data_path, diagram_path)
 
 
@@ -344,5 +350,7 @@ def diagram_param_search(data_path: str, output_path: str):
 
 
 if __name__ == '__main__':
-    full_evaluation_pipe('~/thesis/trainings/intermediate/',
-                         '~/thesis/gt/20_02_20/poisson_verts2node/validation/')
+    s_path = '~/thesis/trainings/intermediate/'
+    v_path = '~/thesis/gt/20_02_20/poisson_verts2node/validation/'
+    o_path = s_path + 'evaluation/'
+    full_evaluation_pipe(s_path, v_path, o_path)
