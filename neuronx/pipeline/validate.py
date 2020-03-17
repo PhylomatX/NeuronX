@@ -134,7 +134,7 @@ def validation(argscont: ArgsContainer, val_path: str, out_path: str, model_type
         model_times.append(model_timing)
         map_times.append(map_timing)
     if obj is not None:
-        pm.save_prediction(obj)
+        pm.save_prediction()
 
     # save timing results
     with open(out_path + 'timing.txt', 'w') as f:
@@ -181,7 +181,7 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
             continue
         try:
             argscont = ArgsContainer().load_from_pkl(set_path + di + '/argscont.pkl')
-        except FileNotFoundError:
+        except TypeError:
             try:
                 argscont = args2container_14(set_path + di + '/training_args.pkl')
             except FileNotFoundError:

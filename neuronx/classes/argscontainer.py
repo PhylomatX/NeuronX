@@ -36,39 +36,36 @@ class ArgsContainer(object):
                  optimizer: str = 'adam',
                  scheduler: str = 'steplr'):
 
-        self._save_root = os.path.expanduser(save_root)
-        self._train_path = os.path.expanduser(train_path)
+        if save_root is not None:
+            self._save_root = os.path.expanduser(save_root)
+            self._train_save_path = f'{self._save_root}{name}/'
+        else:
+            self._save_root = None
+            self._train_save_path = None
+        if train_path is not None:
+            self._train_path = os.path.expanduser(train_path)
+        else:
+            self._train_path = None
         self._name = name
-        self._val_save_path = f'{self._save_root}validation/{name}/'
-        self._val_info_path = f'{self._val_save_path}info/'
-        self._train_save_path = f'{self._save_root}{name}/'
-
         self._class_num = class_num
         self._sample_num = sample_num
         self._batch_size = batch_size
-
         self._train_transforms = train_transforms
         if self._train_transforms is None:
             self._train_transforms = [clouds.Identity()]
-
         self._input_channels = input_channels
         self._features = features
-        for key in self._features.keys():
-            if isinstance(self._features[key], int):
-                if self._input_channels != 1:
+        if self._features is not None:
+            for key in self._features.keys():
+                if isinstance(self._features[key], int):
+                    if self._input_channels != 1:
+                        raise ValueError("Feature dimension doesn't match with number of input channels.")
+                elif len(self._features[key]) != self._input_channels:
                     raise ValueError("Feature dimension doesn't match with number of input channels.")
-            elif len(self._features[key]) != self._input_channels:
-                raise ValueError("Feature dimension doesn't match with number of input channels.")
-
         self._density_mode = density_mode
         self._chunk_size = chunk_size
         self._tech_density = tech_density
         self._bio_density = bio_density
-        if self._density_mode and (self._bio_density is None or self._tech_density is None):
-            raise ValueError("In density mode both bio and tech densities are required.")
-        if not self._density_mode and self._chunk_size is None:
-            raise ValueError("In context mode, the size of the chunks is required.")
-
         self._use_val = use_val
         self._val_path = val_path
         self._val_iter = val_iter
@@ -83,8 +80,8 @@ class ArgsContainer(object):
         else:
             t_num = 0
             for transform in self._train_transforms:
-                t_num += 1
                 if not transform.augmentation:
+                    t_num += 1
                     valid = False
                     for val_transform in self._val_transforms:
                         if val_transform.attributes == transform.attributes:
@@ -212,8 +209,6 @@ class ArgsContainer(object):
 
     @property
     def val_info_path(self):
-        if not os.path.exists(self._val_info_path):
-            os.makedirs(self._val_info_path)
         return self._val_info_path
 
     @property
@@ -272,7 +267,6 @@ class ArgsContainer(object):
         """
         self.__init__(**basics.load_pkl(path))
         return self
-
 
 def args2container_14(file: str) -> ArgsContainer:
     """ Provides backward compatibility for trainings started on 2020_03_14"""

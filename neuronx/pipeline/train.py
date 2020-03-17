@@ -139,32 +139,36 @@ def training_thread(acont: ArgsContainer):
 if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
-    density_mode = True
-    bio_density = 50
-    sample_num = 11000
-    chunk_size = 8000
+    density_mode = False
+    bio_density = 20
+    sample_num = 28000
+    chunk_size = 30000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    normalization = 100000
+    normalization = 30000
     argscont = ArgsContainer(save_root='/u/jklimesch/thesis/trainings/current/',
                              train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_verts2node/',
                              sample_num=sample_num,
-                             name=name + '_cos',
+                             name=name + f'_{normalization}',
                              class_num=3,
-                             train_transforms=[clouds.RandomVariation((-1, 1)), clouds.RandomRotate(),
+                             train_transforms=[clouds.RandomVariation((-20, 20)), clouds.RandomRotate(),
                                                clouds.Normalization(normalization), clouds.Center()],
-                             batch_size=16,
-                             input_channels=1,
+                             batch_size=8,
+                             input_channels=4,
                              use_val=False,
-                             features={'hc': 1},
+                             features={'hc': np.array([1, 0, 0, 0]),
+                                       'mi': np.array([0, 1, 0, 0]),
+                                       'vc': np.array([0, 0, 1, 0]),
+                                       'sy': np.array([0, 0, 0, 1])},
+                             chunk_size=chunk_size,
                              tech_density=1500,
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
                              label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
-                             hybrid_mode=True,
-                             scheduler='cosannwarm',
-                             optimizer='sgd')
+                             hybrid_mode=False,
+                             scheduler='steplr',
+                             optimizer='adam')
     training_thread(argscont)

@@ -3,31 +3,30 @@ import glob
 import numpy as np
 import sklearn.metrics as sm
 from tqdm import tqdm
-from typing import Tuple
 from morphx.processing import objects
 from morphx.data import basics
 import matplotlib.pyplot as plt
+from typing import List, Tuple
 from neuronx.classes.datacontainer import DataContainer
+from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.pipeline import validate as val
 
 
 # -------------------------------------- EVALUATION METHODS ------------------------------------------- #
 
-def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: str = 'Evaluation',
-                 total: bool = False, direct: bool = False, filters: bool = False, drop_unpreds: bool = True,
-                 data_type: str = 'ce', target_names: list = None):
+def eval_dataset(input_path: str, output_path: str, report_name: str = 'Evaluation', total: bool = False,
+                 mode: str = 'mvs', filters: bool = False, drop_unpreds: bool = True, data_type: str = 'ce',
+                 target_names: list = None):
     """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
         ground truth files with different filters or under different conditions.
 
     Args:
         input_path: Location of HybridClouds with predictions, saved as pickle files by a MorphX prediction mapper.
-        gt_path: Location of ground truth files, one for each file at input_path. Must have the same names as their
-            counterparts.
         output_path: Location where results of evaluation should be saved.
         report_name: Name of the current evaluation. Is used as the filename in which the evaluation report gets saved.
         total: Combine the predictions of all files to apply the metrics to the total prediction array.
-        direct: Flag for swichting off the majority vote which is normally applied if there are multiple predictions
-            for one vertex. If this flag is set, only the first prediction is taken into account.
+        mode: 'd': direct mode (first prediction is taken), 'mv': majority vote mode (majority vote on predictions)
+            'mvs' majority vote smoothing mode (majority vote on predicitons and smoothing afterwards)
         filters: After mapping the vertex labels to the skeleton, this flag can be used to apply filters to the skeleton
             and append the evaluation of these filtered skeletons.
         drop_unpreds: Flag for dropping all vertices or nodes which don't have predictions and whose labels are thus set
@@ -37,10 +36,9 @@ def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: s
         target_names: encoding of labels
     """
     input_path = os.path.expanduser(input_path)
-    gt_path = os.path.expanduser(gt_path)
     output_path = os.path.expanduser(output_path)
-    files = glob.glob(input_path + '*.pkl')
-    gt_files = glob.glob(gt_path + '*.pkl')
+    files = glob.glob(input_path + 'sso_*.pkl')
+    argscont = ArgsContainer().load_from_pkl(input_path + 'argscont.pkl')
     reports = {}
     reports_txt = ""
     # Arrays for concatenating the labels of all files for later total evaluation
@@ -49,16 +47,9 @@ def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: s
     for file in tqdm(files):
         slashs = [pos for pos, char in enumerate(file) if char == '/']
         name = file[slashs[-1] + 1:-4]
-        # Find corresponding ground truth
-        gt_file = None
-        for item in gt_files:
-            if name in item:
-                gt_file = item
-        if gt_file is None:
-            print("Ground truth for {} was not found. Skipping file.".format(name))
-            continue
-        report, report_txt = eval_single(file, gt_file, total_labels, direct=direct, filters=filters,
-                                         drop_unpreds=drop_unpreds, data_type=data_type, target_names=target_names)
+        report, report_txt = eval_single(file, total_labels, mode=mode, target_names=target_names, filters=filters,
+                                         drop_unpreds=drop_unpreds, data_type=data_type,
+                                         label_mapping=argscont.label_mappings)
         reports[name] = report
         reports_txt += name + '\n\n' + report_txt + '\n\n\n'
     # Perform evaluation on total label arrays (labels from all files sticked together), prediction
@@ -66,23 +57,22 @@ def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: s
     total_report = {}
     total_report_txt = 'Total\n\n'
     if total:
-        if direct:
-            mode = 'd'
-        else:
-            mode = 'mv'
         targets = get_target_names(total_labels['gt'], total_labels['pred'], target_names)
-        total_report[mode] = sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True,
-                                                      target_names=targets)
-        total_report_txt += mode + '\n\n' + sm.classification_report(total_labels['gt'], total_labels['pred'],
-                                                                     target_names=targets) + '\n\n'
+        total_report[mode] = \
+            sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True, target_names=targets)
+        total_report_txt += \
+            mode + '\n\n' + \
+            sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets) + '\n\n'
         mode += '_skel'
         if filters:
             mode += '_f'
         targets = get_target_names(total_labels['gt_node'], total_labels['pred_node'], target_names)
-        total_report[mode] = sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
-                                                      output_dict=True, target_names=targets)
-        total_report_txt += mode + '\n\n' + sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
-                                                                     target_names=targets) + '\n\n'
+        total_report[mode] = \
+            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
+                                     output_dict=True, target_names=targets)
+        total_report_txt += \
+            mode + '\n\n' + sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
+                                                     target_names=targets) + '\n\n'
     reports['total'] = total_report
     reports_txt += total_report_txt
     basics.save2pkl(reports, output_path, name=report_name)
@@ -91,60 +81,48 @@ def eval_dataset(input_path: str, gt_path: str, output_path: str, report_name: s
     return reports
 
 
-def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = False, target_names: list = None,
-                filters: bool = False, drop_unpreds: bool = True, data_type: str = 'obj') -> tuple:
+def eval_single(file: str, total: dict = None, mode: str = 'mvs', target_names: list = None, filters: bool = False,
+                drop_unpreds: bool = True, data_type: str = 'obj', label_mapping: List[Tuple[int, int]] = None) -> tuple:
     """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
-        ground truth files with different filters or under different conditions.
-
-    Args:
-        file: HybridCloud with predictions, saved as pickle file by a MorphX prediction mapper.
-        gt_file: Ground truth file corresponding to the HybridCloud given in file.
-        total: Use given dict to save processed predictions for later use (see eval_dataset).
-        direct: Flag for swichting off the majority vote which is normally applied if there are multiple predictions
-            for one vertex. If this flag is set, only the first prediction is taken into account.
-        target_names: encoding of labels.
-        filters: After mapping the vertex labels to the skeleton, this flag can be used to apply filters to the skeleton
-            and append the evaluation of these filtered skeletons.
-        drop_unpreds: Flag for dropping all vertices or nodes which don't have predictions and whose labels are thus set
-            to -1. If this flag is not set, the number of vertices or nodes without predictions might be much higher
-            than the one of the predicted vertices or nodes, which results in bad evaluation results.
-        data_type: 'obj' for CloudEnsembles, 'hc' for HybridClouds
+        ground truth files with different filters or under different conditions. See eval_dataset for argument
+        description.
 
     Returns:
         Evaluation report as string.
     """
     file = os.path.expanduser(file)
-    gt_file = os.path.expanduser(gt_file)
+    preds = basics.load_pkl(file)
     # load HybridCloud and corresponding ground truth
-    obj = objects.load_obj(data_type, file)
-    gt_obj = objects.load_obj(data_type, gt_file)
-    hc = obj.hc
-    gt_hc = gt_obj.hc
-
-    if len(hc.labels) != len(gt_hc.labels):
-        raise ValueError("Length of ground truth label array doesn't match with length of predicted label array.")
+    obj = objects.load_obj(data_type, preds[0])
+    obj.set_predictions(preds[1])
+    if label_mapping is not None:
+        obj.hc.map_labels([(3, 1), (4, 1), (5, 0), (6, 0)])
     reports = {}
     reports_txt = ""
     # Perform majority vote on existing predictions and set these as new labels
-    if direct:
-        obj.preds2labels(False)
-        mode = 'd'
+    if mode == 'd':
+        obj.generate_pred_labels(False)
+    elif mode == 'mv':
+        obj.generate_pred_labels()
+    elif mode == 'mvs':
+        obj.generate_pred_labels()
+        obj.prediction_smoothing()
     else:
-        obj.preds2labels()
-        mode = 'mv'
+        raise ValueError(f"Mode {mode} is not known.")
+    hc = obj.hc
+    if len(hc.pred_labels) != len(hc.labels):
+        raise ValueError("Length of predicted label array doesn't match with length of label array.")
     # Get evaluation for vertices
-    gtl, hcl = handle_unpreds(gt_hc.labels, hc.labels, drop_unpreds)
-
+    gtl, hcl = handle_unpreds(hc.labels, hc.pred_labels, drop_unpreds)
     targets = get_target_names(gtl, hcl, target_names)
-    reports[mode] = sm.classification_report(gtl, hcl, output_dict=True,
-                                             target_names=targets)
+    reports[mode] = sm.classification_report(gtl, hcl, output_dict=True, target_names=targets)
     reports_txt += mode + '\n\n' + sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
     # Get evaluation for skeletons
     mode += '_skel'
     if filters:
         hc.clean_node_labels()
         mode += '_f'
-    gtnl, hcnl = handle_unpreds(gt_hc.node_labels, hc.node_labels, drop_unpreds)
+    gtnl, hcnl = handle_unpreds(hc.node_labels, hc.pred_node_labels, drop_unpreds)
     targets = get_target_names(gtnl, hcnl, target_names)
     reports[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
     reports_txt += mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
@@ -157,7 +135,7 @@ def eval_single(file: str, gt_file: str, total: dict = None, direct: bool = Fals
     return reports, reports_txt
 
 
-def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: bool = False,
+def evaluate_validation_set(set_path: str, gt_path: str, total=True, mode: str = 'mvs',
                             filters: bool = False, drop_unpreds: bool = True, data_type: str = 'ce',
                             eval_name: str = 'evaluation'):
     """ Evaluates validations from multiple trainings.
@@ -166,7 +144,8 @@ def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: boo
         set_path: path to validation folders
         gt_path: path where gt files corresponding to validation files can be found
         total: flag for generating a total evaluation
-        direct: flag for taking the predictions without a majority vote
+        mode: 'd': direct mode (first prediction is taken), 'mv': majority vote mode (majority vote on predictions)
+            'mvs' majority vote smoothing mode (majority vote on predicitons and smoothing afterwards)
         filters: flag for applying filters to skeleton predictions
         drop_unpreds: flag for removing vertices without predictions
         data_type: type of dataset ('ce' for CloudEnsembles, 'hc' for HybridClouds)
@@ -179,14 +158,13 @@ def evaluate_validation_set(set_path: str, gt_path: str, total=True, direct: boo
     reports = {}
     for di in tqdm(dirs):
         di_in_path = set_path + di + '/'
-        di_out_path = set_path + di + '/' + eval_name
+        di_out_path = set_path + di + '/' + eval_name + '/'
         if os.path.exists(di_out_path):
             print(di + " has already been processed. Skipping...")
             continue
         print("Processing " + di)
-        report = eval_dataset(di_in_path, gt_path, di_out_path, total=total, direct=direct,
-                              filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
-                              report_name=eval_name, target_names=target_names)
+        report = eval_dataset(di_in_path, di_out_path, report_name=eval_name, total=total, mode=mode, filters=filters,
+                              drop_unpreds=drop_unpreds, data_type=data_type, target_names=target_names)
         argscont = basics.load_pkl(di_in_path + 'argscont.pkl')
         report.update(argscont)
         reports[di] = report
@@ -221,7 +199,7 @@ def summarize_reports(set_path: str, eval_date: str):
     for di in dirs:
         input_path = set_path + di + '/'
         report = basics.load_pkl(input_path + 'evaluation/eval_' + eval_date + '.pkl')
-        argscont = basics.load_pkl(input_path + 'info/argscont.pkl')
+        argscont = basics.load_pkl(input_path + 'argscont.pkl')
         report.update(argscont)
         reports[di] = report
     basics.save2pkl(reports, set_path + 'evaluation/', name='eval_' + eval_date)
@@ -269,7 +247,7 @@ def reports2data(reports_path: str, output_path: str, cell_key: str = 'total', p
 
 # -------------------------------------- PIPELINE METHODS ------------------------------------------- #
 
-def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, direct: bool = False, filters: bool = False,
+def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, mode: str = 'mv', filters: bool = False,
                          drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
                          part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
                          eval_name: str = 'evaluation'):
@@ -281,7 +259,7 @@ def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, direct: 
         val_path: path to cell pickle files which should get used for validation and evaluation.
         out_path: path where evaluation results should get saved.
         total:
-        direct:
+        mode:
         filters:
         drop_unpreds:
         data_type:
@@ -295,17 +273,18 @@ def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, direct: 
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
     # run validations
-    val.validate_training_set(set_path, val_path, out_path)
+    # val.validate_training_set(set_path, val_path, out_path)
     # evaluate validations
-    evaluate_validation_set(out_path, val_path, total, direct, filters, drop_unpreds, data_type,
+    evaluate_validation_set(out_path, val_path, total, mode, filters, drop_unpreds, data_type,
                             eval_name=eval_name)
     # tranform reports to data
-    reports_path = out_path + eval_name + '/'
-    data_path = reports_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_data.pkl'
-    reports2data(reports_path + eval_name + '.pkl', data_path, cell_key, part_key, class_key, metric_key)
-    # generate diagrams
-    diagram_path = reports_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_diagram.png'
-    diagram_param_search(data_path, diagram_path)
+    # cell_key = 'total'
+    # reports_path = out_path + eval_name + '/'
+    # data_path = reports_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_data.pkl'
+    # reports2data(reports_path + eval_name + '.pkl', data_path, cell_key, part_key, class_key, metric_key)
+    # # generate diagrams
+    # diagram_path = reports_path + f'{cell_key}_{part_key}_{class_key}_{metric_key}_diagram.png'
+    # diagram_param_search(data_path, diagram_path)
 
 
 # -------------------------------------- DIAGRAM GENERATION ------------------------------------------- #
@@ -317,35 +296,42 @@ def diagram_param_search(data_path: str, output_path: str):
     context_data = data['context_data']
 
     fig, ax1 = plt.subplots()
-    ax1.set_xlabel('density (point/um²)')
-    ax1.set_ylabel('accuracy')
-    ax2 = ax1.twiny()
-    ax2.set_xlabel('context size (nm)')
+    ax1.set_xlabel('point number')
+    ax1.set_ylabel('f1-score')
+    # ax2 = ax1.twiny()
+    # ax2.set_xlabel('context size (nm)')
 
     colors = ['b', 'r', 'g', 'b', 'y', 'c', 'm']
-    plots = []
     labels = []
 
-    for ix, key in enumerate(density_data):
-        densities = np.array(density_data[key][0])
-        metrics = np.array(density_data[key][1])
-        plot = ax1.scatter(densities, metrics, c=colors[ix], marker='o')
-        labels.append("density, " + str(key))
-        plots.append(plot)
+    points = []
+    metrics = []
+    for key in density_data.keys():
+        points.append(key)
+        labels.append(str(key))
+        metrics.append(density_data[key][1])
+    plot = ax1.scatter(points, np.array(metrics), c='k', marker='.')
 
-    for ix, key in enumerate(context_data):
-        context_sizes = np.array(context_data[key][0])
-        metrics = np.array(context_data[key][1])
-        plot = ax2.scatter(context_sizes, metrics, c=colors[ix], marker='x')
-        labels.append("context, " + str(key))
-        plots.append(plot)
+    # for ix, key in enumerate(density_data):
+    #     densities = np.array(density_data[key][0])
+    #     metrics = np.array(density_data[key][1])
+    #     plot = ax1.scatter(densities, metrics, c='b', marker='o')
+    #     labels.append("density, " + str(key))
+    #     plots.append(plot)
+    #
+    # for ix, key in enumerate(context_data):
+    #     context_sizes = np.array(context_data[key][0])
+    #     metrics = np.array(context_data[key][1])
+    #     plot = ax2.scatter(context_sizes, metrics, c=colors[ix], marker='x')
+    #     labels.append("context, " + str(key))
+    #     plots.append(plot)
 
-    box = ax1.get_position()
-    ax1.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
-    ax2.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
-    plt.tight_layout()
+    # box = ax1.get_position()
+    # ax1.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+    # ax2.set_position([box.x0, box.y0 + box.height * 0.1, box.width, box.height * 0.9])
+    # plt.tight_layout()
     ax1.grid()
-    ax1.legend(plots, labels, loc='lower center', ncol=int(len(labels)/2), title="mode, sample num")
+    # ax1.legend(labels, loc='lower center', ncol=int(len(labels)/2), title="mode, sample num")
     plt.savefig(output_path)
 
 
