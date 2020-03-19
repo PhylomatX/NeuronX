@@ -80,7 +80,9 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
     return chunk_timing / chunk_factor, model_timing / (iter_num * batch_num), map_timing / map_factor
 
 
-def validation(argscont: ArgsContainer, val_path: str, out_path: str, model_type: str = 'state_dict.pth'):
+def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_path: str,
+               model_type: str = 'state_dict.pth', val_iter: int = 1):
+    training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
 
@@ -99,7 +101,7 @@ def validation(argscont: ArgsContainer, val_path: str, out_path: str, model_type
         model = SegBig(argscont.input_channels, argscont.class_num)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
-    full = torch.load(argscont.train_save_path + model_type)
+    full = torch.load(training_path + model_type)
     model.load_state_dict(full['model_state_dict'])
     model.to(device)
 
@@ -124,9 +126,10 @@ def validation(argscont: ArgsContainer, val_path: str, out_path: str, model_type
     # perform validation
     obj = None
     for obj in th.obj_names:
+        print(f"Processing {obj}")
         start = time.time()
         chunk_timing, model_timing, map_timing = \
-            validate_single(th, obj, argscont.batch_size, argscont.sample_num, argscont.val_iter, device, model, pm,
+            validate_single(th, obj, argscont.batch_size, argscont.sample_num, val_iter, device, model, pm,
                             argscont.input_channels)
         total_timing = time.time() - start
         total_times.append(total_timing)
@@ -159,7 +162,8 @@ def validation(argscont: ArgsContainer, val_path: str, out_path: str, model_type
     torch.cuda.empty_cache()
 
 
-def validate_training_set(set_path: str, val_path: str, out_path: str, model_type: str = 'state_dict.pth'):
+def validate_training_set(set_path: str, val_path: str, out_path: str, model_type: str = 'state_dict.pth',
+                          val_iter: int = 1):
     """ Validate multiple trainings.
 
     Args:
@@ -167,6 +171,7 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
         val_path: path to cell files on which the trained models should get validated.
         out_path: path where validation folders should get saved.
         model_type: name of model file which should be used.
+        val_iter: number of validation iterations.
     """
     set_path = os.path.expanduser(set_path)
     val_path = os.path.expanduser(val_path)
@@ -175,21 +180,20 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
     if not os.path.exists(out_path):
         os.makedirs(out_path)
     for di in dirs:
+        print(f"Processing {di}")
         # skip trainings where validation has already been generated
         if os.path.exists(out_path + di):
             print(di + " has already been processed. Skipping...")
             continue
-        try:
-            argscont = ArgsContainer().load_from_pkl(set_path + di + '/argscont.pkl')
-        except TypeError:
-            try:
-                argscont = args2container_14(set_path + di + '/training_args.pkl')
-            except FileNotFoundError:
-                print(f"Could not find training args for {di}. Training gets skipped...")
-                continue
-        except NotADirectoryError:
+        if not os.path.isdir(set_path + di):
             continue
-        validation(argscont, val_path, out_path + di + '/', model_type=model_type)
+        if os.path.exists(set_path + di + '/argscont.pkl'):
+            argscont = ArgsContainer().load_from_pkl(set_path + di + '/argscont.pkl')
+        else:
+            argscont = args2container_14(set_path + di + '/training_args.pkl')
+
+        validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
+                   val_iter=val_iter)
 
 
 if __name__ == '__main__':

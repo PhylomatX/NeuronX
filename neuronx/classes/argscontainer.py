@@ -227,7 +227,8 @@ class ArgsContainer(object):
     def scheduler(self):
         return self._scheduler
 
-    def save2pkl(self, path: str):
+    @property
+    def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
                      'sample_num': self._sample_num,
@@ -255,6 +256,10 @@ class ArgsContainer(object):
                      'hybrid_mode': self._hybrid_mode,
                      'optimizer': self._optimizer,
                      'scheduler': self._scheduler}
+        return attr_dict
+
+    def save2pkl(self, path: str):
+        attr_dict = self.attr_dict
         with open(path, 'wb') as f:
             pickle.dump(attr_dict, f)
 
