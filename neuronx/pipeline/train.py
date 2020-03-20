@@ -76,11 +76,13 @@ def training_thread(acont: ArgsContainer):
                               bio_density=acont.bio_density,
                               tech_density=acont.tech_density,
                               transform=val_transforms,
-                              specific=True,
                               obj_feats=acont.features,
                               label_mappings=acont.label_mappings,
                               hybrid_mode=acont.hybrid_mode)
-        pm = PredictionMapper(acont.val_path, f'{acont.save_root}validation/{name}/', splitfile=val_ds.splitfile)
+
+        # trainer3D was updated to new validation, so prediction mapping is not necessary any more.
+        pm = None
+        # pm = PredictionMapper(acont.val_path, f'{acont.save_root}validation/{name}/', splitfile=val_ds.splitfile)
     else:
         val_ds = None
         pm = None
@@ -131,6 +133,9 @@ def training_thread(acont: ArgsContainer):
     # Archiving training script, src folder, env info
     Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
     acont.save2pkl(trainer.save_path + '/argscont.pkl')
+    with open(trainer.save_path + '/argscont.txt', 'w') as f:
+        f.write(str(argscont.attr_dict))
+    f.close()
 
     # Start training
     trainer.run(max_steps)
@@ -139,25 +144,27 @@ def training_thread(acont: ArgsContainer):
 if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
-    density_mode = False
-    bio_density = 20
-    sample_num = 28000
-    chunk_size = 30000
+    density_mode = True
+    bio_density = 10
+    sample_num = 80000
+    chunk_size = 20000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    normalization = 30000
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/trainings/current/',
-                             train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_verts2node/',
+    normalization = 100000
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/density_10/',
+                             train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/',
+                             val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
                              sample_num=sample_num,
                              name=name + f'_{normalization}',
                              class_num=3,
-                             train_transforms=[clouds.RandomVariation((-20, 20)), clouds.RandomRotate(),
+                             train_transforms=[clouds.RandomVariation((-1, 1)), clouds.RandomRotate(),
                                                clouds.Normalization(normalization), clouds.Center()],
-                             batch_size=8,
+                             batch_size=2,
                              input_channels=4,
-                             use_val=False,
+                             use_val=True,
+                             val_freq=1,
                              features={'hc': np.array([1, 0, 0, 0]),
                                        'mi': np.array([0, 1, 0, 0]),
                                        'vc': np.array([0, 0, 1, 0]),
@@ -166,7 +173,7 @@ if __name__ == '__main__':
                              tech_density=1500,
                              bio_density=bio_density,
                              density_mode=density_mode,
-                             max_step_size=10000000,
+                             max_step_size=256000,
                              label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
                              hybrid_mode=False,
                              scheduler='steplr',

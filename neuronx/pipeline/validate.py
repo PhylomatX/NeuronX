@@ -126,6 +126,11 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     # perform validation
     obj = None
     for obj in th.obj_names:
+        # skip trainings where validation has already been generated
+        if os.path.exists(out_path + obj + '_preds.pkl'):
+            print(obj + " has already been processed. Skipping...")
+            obj = None
+            continue
         print(f"Processing {obj}")
         start = time.time()
         chunk_timing, model_timing, map_timing = \
@@ -138,9 +143,11 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         map_times.append(map_timing)
     if obj is not None:
         pm.save_prediction()
+    else:
+        return 
 
     # save timing results
-    with open(out_path + 'timing.txt', 'w') as f:
+    with open(out_path + 'timing.txt', 'a') as f:
         f.write('\nModel timing:\n\n')
         for idx, item in enumerate(th.obj_names):
             f.write(f'{item}: \t\t {model_times[idx]} s.\n')
@@ -181,17 +188,16 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
         os.makedirs(out_path)
     for di in dirs:
         print(f"Processing {di}")
-        # skip trainings where validation has already been generated
-        if os.path.exists(out_path + di):
-            print(di + " has already been processed. Skipping...")
-            continue
         if not os.path.isdir(set_path + di):
             continue
         if os.path.exists(set_path + di + '/argscont.pkl'):
             argscont = ArgsContainer().load_from_pkl(set_path + di + '/argscont.pkl')
         else:
-            argscont = args2container_14(set_path + di + '/training_args.pkl')
-
+            if os.path.exists(set_path + di + '/training_args.pkl'):
+                argscont = args2container_14(set_path + di + '/training_args.pkl')
+            else:
+                print("No arguments found for this training. Skipping...")
+                continue
         validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
                    val_iter=val_iter)
 

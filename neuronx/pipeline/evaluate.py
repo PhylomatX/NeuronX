@@ -208,28 +208,6 @@ def summarize_reports(set_path: str, eval_name: str):
     basics.save2pkl(reports, set_path, name=eval_name)
 
 
-# -------------------------------------- PIPELINE METHODS ------------------------------------------- #
-
-def full_evaluation_pipe(set_path: str, val_path, out_path, total=True, mode: str = 'mv', filters: bool = False,
-                         drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
-                         part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
-                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2):
-    """ Runs full pipeline on given training set (including validation, evaluation and diagram generation. """
-    if pipe_steps is None:
-        pipe_steps = [True, True]
-    out_path += set_path + f'evaluation_valiter{val_iter}'
-    eval_name += f'_{mode}'
-    set_path = os.path.expanduser(set_path)
-    val_path = os.path.expanduser(val_path)
-    out_path = os.path.expanduser(out_path)
-    if pipe_steps[0]:
-        # run validations
-        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict_final.pth', val_iter=val_iter)
-    if pipe_steps[1]:
-        # evaluate validations
-        evaluate_validation_set(out_path, total, mode, filters, drop_unpreds, data_type, eval_name=eval_name)
-
-
 # -------------------------------------- DIAGRAM GENERATION ------------------------------------------- #
 
 def reports2data(reports_path: str, identifier: List[str], cell_key: str = 'total', part_key: str = 'mv',
@@ -334,23 +312,23 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
             for ix, key in enumerate(density_data.keys()):
                 densities = density_data[key][0]
                 metrics = density_data[key][1]
-                ax.scatter(densities, metrics, c=colors[ix], label=ident_labels[data_ix] + '_' + str(key),
+                ax.scatter(densities, metrics, c=colors[ix], label=ident_labels[data_ix] + ', ' + str(key) + ' points',
                            marker=markers[data_ix])
-                ax.set_xlabel(r'points/\microm²')
+                ax.set_xlabel(r'points/\mu m²')
                 ax.set_ylabel(data.metric)
         elif not density and not points:
             for ix, key in enumerate(context_data.keys()):
                 contexts = context_data[key][0]
                 metrics = context_data[key][1]
-                ax.scatter(contexts, metrics, c=colors[ix], label=ident_labels[data_ix] + '_' + str(key),
+                ax.scatter(contexts, metrics, c=colors[ix], label=ident_labels[data_ix] + ', ' + str(key) + ' points',
                            marker=markers[data_ix])
-                ax.set_xlabel(r'context size in \nanom')
+                ax.set_xlabel(r'context size in nm')
                 ax.set_ylabel(data.metric)
         elif density and points:
             for ix, key in enumerate(density_data.keys()):
                 point_nums = density_data[key][0]
                 metrics = density_data[key][1]
-                ax.scatter(point_nums, metrics, c=colors[ix], label=ident_labels[data_ix] + '_' + str(key),
+                ax.scatter(point_nums, metrics, c=colors[ix], label=ident_labels[data_ix] + ', density: ' + str(key),
                            marker=markers[data_ix])
                 ax.set_xlabel('number of points')
                 ax.set_ylabel(data.metric)
@@ -358,22 +336,56 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
             for ix, key in enumerate(context_data.keys()):
                 point_nums = context_data[key][0]
                 metrics = context_data[key][1]
-                ax.scatter(point_nums, metrics, c=colors[ix], label=ident_labels[data_ix] + '_' + str(key),
+                ax.scatter(point_nums, metrics, c=colors[ix], label=ident_labels[data_ix] + ', chunk size: ' + str(key),
                            marker=markers[data_ix])
                 ax.set_xlabel('number of points')
                 ax.set_ylabel(data.metric)
     ax.legend(loc=0)
     ax.grid(True)
-    fig.tight_layout()
+    plt.title(f"{cell_key}, {part_key}")
     plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.png")
 
 
-if __name__ == '__main__':
-    # s_path = '~/thesis/trainings/past/param_search_density/'
-    # v_path = '~/thesis/gt/20_02_20/poisson_verts2node/validation/'
-    # full_evaluation_pipe(s_path, v_path, pipe_steps=[False, True, False])
+def generate_diagrams(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
+                      points: bool, density: bool, part_key: str = 'mv'):
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
+                     density=density)
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
+                     class_key='accuracy', density=density)
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
+                     density=density)
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
+                     class_key='accuracy', density=density)
 
-    r_path = '~/thesis/trainings/past/param_search_density/evaluation_valiter2/evaluation_mvs.pkl'
-    o_path = '~/thesis/trainings/past/param_search_density/evaluation_valiter2/'
-    generate_diagram(r_path, o_path, ['co'], ['cell organelles', 'no cell organelles'], points=True,
-                     part_key='mvs', class_key='accuracy')
+
+# -------------------------------------- PIPELINE METHODS ------------------------------------------- #
+
+def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
+                         drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
+                         part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
+                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2):
+    """ Runs full pipeline on given training set (including validation, evaluation and diagram generation. """
+    if pipe_steps is None:
+        pipe_steps = [True, True]
+    out_path = set_path + f'{eval_name}_valiter{val_iter}/'
+    eval_name += f'_{mode}'
+    set_path = os.path.expanduser(set_path)
+    val_path = os.path.expanduser(val_path)
+    out_path = os.path.expanduser(out_path)
+    if pipe_steps[0]:
+        # run validations
+        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter)
+    if pipe_steps[1]:
+        # evaluate validations
+        evaluate_validation_set(out_path, total, mode, filters, drop_unpreds, data_type, eval_name=eval_name)
+
+
+if __name__ == '__main__':
+    # s_path = '~/thesis/results/param_search_density/'
+    # v_path = '~/thesis/gt/20_02_20/poisson_verts2node/validation/'
+    # full_evaluation_pipe(s_path, v_path, eval_name='evaluation_large')
+
+    r_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/evaluation_large_mv.pkl'
+    o_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/'
+    generate_diagrams(r_path, o_path, ['co'], ['cell orgas', 'no cell orgas'],
+                      points=True, density=True, part_key='mv')

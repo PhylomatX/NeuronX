@@ -134,9 +134,11 @@ def generate_verts2node(input_path: str, output_path: str):
         slashs = [pos for pos, char in enumerate(file) if char == '/']
         name = file[slashs[-1] + 1:-4]
         ce = ensembles.ensemble_from_pkl(file)
+        ce.reset_ensemble()
+        ce.hc.set_verts2node(None)
         ce.save2pkl(output_path + name + '.pkl')
 
 
 if __name__ == '__main__':
-    generate_verts2node('~/thesis/gt/20_02_20/poisson_verts2node/',
-                        '~/thesis/gt/20_02_20/poisson_verts2node/')
+    generate_verts2node('~/thesis/gt/20_02_20/',
+                        '~/thesis/gt/20_02_20/')
