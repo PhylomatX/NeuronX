@@ -60,6 +60,7 @@ def eval_dataset(input_path: str, output_path: str, argscont: ArgsContainer, rep
     total_report_txt = 'Total\n\n'
     if total:
         coverage = total_labels['coverage']
+        total_report['cov'] = coverage
         targets = get_target_names(total_labels['gt'], total_labels['pred'], target_names)
         total_report[mode] = \
             sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True, target_names=targets)
@@ -375,7 +376,7 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
     ax.legend(loc=0)
     ax.grid(True)
     plt.title(f"{cell_key}, {part_key}")
-    plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.png")
+    plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.svg")
 
 
 def generate_diagrams(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
@@ -414,12 +415,12 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 
 if __name__ == '__main__':
-    s_path = '~/thesis/results/error_calculation/'
-    v_path = '~/thesis/gt/20_02_20/poisson_val/validation/evaluation/'
-    full_evaluation_pipe(s_path, v_path, eval_name='evaluation',
-                         pipe_steps=[True, True], val_iter=2, batch_num=-1)
+    # s_path = '~/thesis/results/timings/validation/'
+    # v_path = '~/thesis/gt/20_02_20/poisson_verts2node/'
+    # full_evaluation_pipe(s_path, v_path, eval_name='eval_timing',
+    #                      pipe_steps=[True, True], val_iter=10, batch_num=-1)
 
-    # r_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/evaluation_large_mv.pkl'
-    # o_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/'
-    # generate_diagrams(r_path, o_path, ['co'], ['cell orgas', 'no cell orgas'],
-    #                   points=True, density=True, part_key='mv')
+    r_path = '~/thesis/results/error_calculation/evaluation_fixed3_valiter5_batchsize-1/evaluation_fixed3_mv.pkl'
+    o_path = '~/thesis/results/error_calculation/evaluation_fixed3_valiter5_batchsize-1/'
+    generate_diagrams(r_path, o_path, ['at80', 'at100', 'at32'], ['80.000 steps', '100.000 steps', '32.000 steps'],
+                      points=True, density=True, part_key='mv')

@@ -2,6 +2,7 @@ import os
 import math
 import torch
 import time
+import pickle
 import random
 import numpy as np
 from tqdm import tqdm
@@ -128,6 +129,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     else:
         batch_size = batch_num
 
+    attr_dicts = {obj: None for obj in th.obj_names}
     # perform validation
     obj = None
     for obj in th.obj_names:
@@ -137,11 +139,14 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
             obj = None
             continue
         print(f"Processing {obj}")
+        attr_dict = th.get_obj_info(obj, hybrid_only=True)
         start = time.time()
         chunk_timing, model_timing, map_timing = \
             validate_single(th, obj, batch_size, argscont.sample_num, val_iter, device, model, pm,
                             argscont.input_channels)
         total_timing = time.time() - start
+        attr_dict['timing'] = total_timing
+        attr_dicts[obj] = attr_dict
         total_times.append(total_timing)
         chunk_times.append(chunk_timing)
         model_times.append(model_timing)
@@ -151,7 +156,18 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     else:
         return 
 
-    # save timing results
+    # save timing results and object information
+    if os.path.exists(out_path + 'obj_info.pkl'):
+        with open(out_path + 'obj_info.pkl', 'rb') as f:
+            attr_dict = pickle.load(f)
+            attr_dict.update(attr_dicts)
+            pickle.dump(attr_dict, f)
+        f.close()
+    else:
+        with open(out_path + 'obj_info.pkl', 'wb') as f:
+            pickle.dump(attr_dicts, f)
+        f.close()
+
     with open(out_path + 'timing.txt', 'a') as f:
         f.write('\nModel timing:\n\n')
         for idx, item in enumerate(th.obj_names):
