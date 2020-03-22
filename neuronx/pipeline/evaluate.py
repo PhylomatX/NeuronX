@@ -1,5 +1,6 @@
 import os
 import glob
+import time
 import numpy as np
 import sklearn.metrics as sm
 from tqdm import tqdm
@@ -10,6 +11,7 @@ from typing import List, Tuple
 from neuronx.classes.datacontainer import DataContainer
 from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.pipeline import validate as val
+from morphx.classes.cloudensemble import CloudEnsemble
 
 
 # -------------------------------------- EVALUATION METHODS ------------------------------------------- #
@@ -41,7 +43,8 @@ def eval_dataset(input_path: str, output_path: str, argscont: ArgsContainer, rep
     reports = {}
     reports_txt = ""
     # Arrays for concatenating the labels of all files for later total evaluation
-    total_labels = {'pred': np.array([]), 'pred_node': np.array([]), 'gt': np.array([]), 'gt_node': np.array([])}
+    total_labels = {'pred': np.array([]), 'pred_node': np.array([]), 'gt': np.array([]), 'gt_node': np.array([]),
+                    'coverage': [0, 0]}
     # Build single file evaluation reports
     for file in tqdm(files):
         slashs = [pos for pos, char in enumerate(file) if char == '/']
@@ -56,11 +59,14 @@ def eval_dataset(input_path: str, output_path: str, argscont: ArgsContainer, rep
     total_report = {}
     total_report_txt = 'Total\n\n'
     if total:
+        coverage = total_labels['coverage']
         targets = get_target_names(total_labels['gt'], total_labels['pred'], target_names)
         total_report[mode] = \
             sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True, target_names=targets)
         total_report_txt += \
             mode + '\n\n' + \
+            f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
+            f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
             sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets) + '\n\n'
         mode += '_skel'
         if filters:
@@ -70,8 +76,8 @@ def eval_dataset(input_path: str, output_path: str, argscont: ArgsContainer, rep
             sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
                                      output_dict=True, target_names=targets)
         total_report_txt += \
-            mode + '\n\n' + sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
-                                                     target_names=targets) + '\n\n'
+            mode + '\n\n' + \
+            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'], target_names=targets) + '\n\n'
     reports['total'] = total_report
     reports_txt += total_report_txt
     basics.save2pkl(reports, output_path, name=report_name)
@@ -81,7 +87,8 @@ def eval_dataset(input_path: str, output_path: str, argscont: ArgsContainer, rep
 
 
 def eval_single(file: str, total: dict = None, mode: str = 'mvs', target_names: list = None, filters: bool = False,
-                drop_unpreds: bool = True, data_type: str = 'obj', label_mapping: List[Tuple[int, int]] = None) -> tuple:
+                drop_unpreds: bool = True, data_type: str = 'obj',
+                label_mapping: List[Tuple[int, int]] = None) -> tuple:
     """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
         ground truth files with different filters or under different conditions. See eval_dataset for argument
         description.
@@ -89,16 +96,18 @@ def eval_single(file: str, total: dict = None, mode: str = 'mvs', target_names: 
     Returns:
         Evaluation report as string.
     """
+    reports = {}
+    reports_txt = ""
     file = os.path.expanduser(file)
     preds = basics.load_pkl(file)
     # load HybridCloud and corresponding ground truth
     obj = objects.load_obj(data_type, preds[0])
     obj.set_predictions(preds[1])
+    reports['pred_num'] = obj.pred_num
     if label_mapping is not None:
         obj.hc.map_labels([(3, 1), (4, 1), (5, 0), (6, 0)])
-    reports = {}
-    reports_txt = ""
     # Perform majority vote on existing predictions and set these as new labels
+    start = time.time()
     if mode == 'd':
         obj.generate_pred_labels(False)
     elif mode == 'mv':
@@ -108,29 +117,52 @@ def eval_single(file: str, total: dict = None, mode: str = 'mvs', target_names: 
         obj.hc.prediction_smoothing()
     else:
         raise ValueError(f"Mode {mode} is not known.")
-    hc = obj.hc
+    pred2label_timing = time.time() - start
+    reports[mode + '_timing'] = pred2label_timing
+    if isinstance(obj, CloudEnsemble):
+        hc = obj.hc
+    else:
+        hc = obj
     if len(hc.pred_labels) != len(hc.labels):
         raise ValueError("Length of predicted label array doesn't match with length of label array.")
     # Get evaluation for vertices
+    coverage = hc.get_coverage()
+    reports['cov'] = coverage
+    # remove unpredicted labels
     gtl, hcl = handle_unpreds(hc.labels, hc.pred_labels, drop_unpreds)
+    # generate evaluation and save it as pkl and as txt
     targets = get_target_names(gtl, hcl, target_names)
     reports[mode] = sm.classification_report(gtl, hcl, output_dict=True, target_names=targets)
-    reports_txt += mode + '\n\n' + sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
+    reports_txt += mode + '\n\n' \
+                   + f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
+                     f'{round((1-coverage[0]/coverage[1])*100)} %\n\n' + \
+                   f'Timing: {round(pred2label_timing, 3)} s\n\n' + \
+                   f'Number of predictions: {obj.pred_num}\n\n' + \
+                   sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
     # Get evaluation for skeletons
+    start = time.time()
     mode += '_skel'
     if filters:
+        # apply smoothing filters
         hc.clean_node_labels()
         mode += '_f'
+    # remove unpredicted labels
     gtnl, hcnl = handle_unpreds(hc.node_labels, hc.pred_node_labels, drop_unpreds)
+    map2skel_timing = time.time() - start
+    reports[mode + '_timing'] = map2skel_timing
+    # generate evaluation and save it as pkl and as txt
     targets = get_target_names(gtnl, hcnl, target_names)
     reports[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
-    reports_txt += mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
+    reports_txt += mode + '\n\n' + f'Timing: {round(map2skel_timing, 3)} s\n\n' + \
+                   sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
     # save generated labels for total evaluation
     if total is not None:
         total['pred'] = np.append(total['pred'], hcl)
         total['pred_node'] = np.append(total['pred_node'], hcnl)
         total['gt'] = np.append(total['gt'], gtl)
         total['gt_node'] = np.append(total['gt_node'], gtnl)
+        total['coverage'][0] += coverage[0]
+        total['coverage'][1] += coverage[1]
     return reports, reports_txt
 
 
@@ -363,29 +395,31 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
 def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
                          drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
                          part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
-                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2):
+                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2, batch_num: int = -1):
     """ Runs full pipeline on given training set (including validation, evaluation and diagram generation. """
     if pipe_steps is None:
         pipe_steps = [True, True]
-    out_path = set_path + f'{eval_name}_valiter{val_iter}/'
+    out_path = set_path + f'{eval_name}_valiter{val_iter}_batchsize{batch_num}/'
     eval_name += f'_{mode}'
     set_path = os.path.expanduser(set_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
     if pipe_steps[0]:
         # run validations
-        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter)
+        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
+                                  batch_num=batch_num)
     if pipe_steps[1]:
         # evaluate validations
         evaluate_validation_set(out_path, total, mode, filters, drop_unpreds, data_type, eval_name=eval_name)
 
 
 if __name__ == '__main__':
-    # s_path = '~/thesis/results/param_search_density/'
-    # v_path = '~/thesis/gt/20_02_20/poisson_verts2node/validation/'
-    # full_evaluation_pipe(s_path, v_path, eval_name='evaluation_large')
+    s_path = '~/thesis/results/error_calculation/'
+    v_path = '~/thesis/gt/20_02_20/poisson_val/validation/evaluation/'
+    full_evaluation_pipe(s_path, v_path, eval_name='evaluation',
+                         pipe_steps=[True, True], val_iter=2, batch_num=-1)
 
-    r_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/evaluation_large_mv.pkl'
-    o_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/'
-    generate_diagrams(r_path, o_path, ['co'], ['cell orgas', 'no cell orgas'],
-                      points=True, density=True, part_key='mv')
+    # r_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/evaluation_large_mv.pkl'
+    # o_path = '~/thesis/results/param_search_density/evaluation_large_valiter2/'
+    # generate_diagrams(r_path, o_path, ['co'], ['cell orgas', 'no cell orgas'],
+    #                   points=True, density=True, part_key='mv')

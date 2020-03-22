@@ -37,7 +37,7 @@ def training_thread(acont: ArgsContainer):
 
     # load model
     if acont.use_big:
-        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats)
+        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -121,7 +121,7 @@ def training_thread(acont: ArgsContainer):
         channel_num=acont.input_channels,
         pred_mapper=pm,
         batchsize=batch_size,
-        num_workers=5,
+        num_workers=min(max(0, acont.batch_size-2), 5),
         save_root=acont.save_root,
         exp_name=acont.name,
         num_classes=acont.class_num,
@@ -145,15 +145,15 @@ if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
     density_mode = True
-    bio_density = 10
-    sample_num = 80000
-    chunk_size = 20000
+    bio_density = 50
+    sample_num = 60000
+    chunk_size = 10000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
     normalization = 100000
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/density_10/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/density_50/',
                              train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/',
                              val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
                              sample_num=sample_num,
@@ -161,10 +161,10 @@ if __name__ == '__main__':
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-1, 1)), clouds.RandomRotate(),
                                                clouds.Normalization(normalization), clouds.Center()],
-                             batch_size=2,
+                             batch_size=4,
                              input_channels=4,
                              use_val=True,
-                             val_freq=1,
+                             val_freq=10,
                              features={'hc': np.array([1, 0, 0, 0]),
                                        'mi': np.array([0, 1, 0, 0]),
                                        'vc': np.array([0, 0, 1, 0]),
@@ -173,7 +173,7 @@ if __name__ == '__main__':
                              tech_density=1500,
                              bio_density=bio_density,
                              density_mode=density_mode,
-                             max_step_size=256000,
+                             max_step_size=10000000,
                              label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
                              hybrid_mode=False,
                              scheduler='steplr',

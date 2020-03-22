@@ -13,75 +13,75 @@ from elektronn3.models.convpoint import SegSmall, SegBig
 from neuronx.classes.argscontainer import ArgsContainer, args2container_14
 
 
+@torch.no_grad()
 def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
                     device: torch.device, model, pm: PredictionMapper, input_channels: int):
     """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
-    with torch.no_grad():
-        chunk_timing = 0
-        model_timing = 0
-        map_timing = 0
-
-        batch_num = math.ceil(th.get_obj_length(hc) / batch_size)
-
-        zero_counter = 0
-        for i in range(iter_num):
-            for batch in tqdm(range(batch_num)):
-                pts = torch.zeros((batch_size, point_num, 3))
-                features = torch.ones((batch_size, point_num, input_channels))
-                mapping_idcs = torch.ones((batch_size, point_num))
-                mask = torch.zeros((batch_size, point_num))
-
-                for j in range(batch_size):
-                    start = time.time()
-                    sample = th[(hc, batch * batch_size + j)]
-                    chunk_timing += time.time() - start
-
-                    pts[j] = sample['pts']
-                    features[j] = sample['features']
-                    mapping_idcs[j] = sample['map']
-                    mask[j] = sample['l_mask']
-
-                # apply model to batch of samples
-                pts = pts.to(device, non_blocking=True)
-                features = features.to(device, non_blocking=True)
+    chunk_timing = [0, 0]
+    model_timing = [0, 0]
+    map_timing = [0, 0]
+    batch_num = math.ceil(th.get_obj_length(hc) / batch_size)
+    for i in range(iter_num):
+        for batch in tqdm(range(batch_num)):
+            pts = torch.zeros((batch_size, point_num, 3))
+            features = torch.ones((batch_size, point_num, input_channels))
+            mapping_idcs = torch.ones((batch_size, point_num))
+            mask = torch.zeros((batch_size, point_num))
+            fill_up = 0
+            remove = []
+            for j in range(batch_size):
                 start = time.time()
-                outputs = model(features, pts)
-                model_timing += time.time() - start
+                sample = th[(hc, batch * batch_size + j)]
+                chunk_timing[0] += time.time() - start
+                chunk_timing[1] += 1
+                # fill up empty batches (happening when all parts of current cell have been processed).
+                # The fill up samples are always build by the first parts of the current cell (thus fill_up = 0)
+                # and will be removed later
+                if torch.all(sample['pts'] == 0):
+                    sample = th[(hc, fill_up)]
+                    fill_up += 1
+                    remove.append(j)
+                pts[j] = sample['pts']
+                features[j] = sample['features']
+                mapping_idcs[j] = sample['map']
+                mask[j] = sample['l_mask']
 
-                # convert all tensors to numpy arrays and apply argmax to outputs
-                pts = pts.cpu().detach().numpy()
-                mask = mask.numpy()
-                mapping_idcs = mapping_idcs.numpy()
-                output_np = outputs.cpu().detach().numpy()
-                output_np = np.argmax(output_np, axis=2)
+            # apply model to batch of samples
+            pts = pts.to(device, non_blocking=True)
+            features = features.to(device, non_blocking=True)
+            start = time.time()
+            outputs = model(features, pts)
+            model_timing[0] += time.time() - start
+            model_timing[1] += 1
 
-                for j in range(batch_size):
-                    if not np.all(pts[j] == 0):
-                        start = time.time()
+            # convert all tensors to numpy arrays and apply argmax to outputs
+            pts = pts.cpu().detach().numpy()
+            mask = mask.numpy()
+            mapping_idcs = mapping_idcs.numpy()
+            output_np = outputs.cpu().detach().numpy()
+            output_np = np.argmax(output_np, axis=2)
 
-                        # filter the points their outputs which should get a prediction
-                        curr_pts = pts[j]
-                        curr_out = output_np[j]
-                        curr_map = mapping_idcs[j]
-                        curr_mask = mask[j].astype(bool)
-                        curr_pts = curr_pts[curr_mask]
-                        curr_out = curr_out[curr_mask]
-                        curr_map = curr_map[curr_mask]
-
-                        # map predictions to original cloud
-                        prediction = PointCloud(curr_pts, curr_out)
-                        pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j)
-                        map_timing += time.time() - start
-                    else:
-                        zero_counter += 1
-
-    chunk_factor = batch_size * iter_num * batch_num
-    map_factor = batch_size * iter_num * batch_num - zero_counter
-    return chunk_timing / chunk_factor, model_timing / (iter_num * batch_num), map_timing / map_factor
+            for j in range(batch_size):
+                if j not in remove:
+                    start = time.time()
+                    # filter the points of the outputs which should get a prediction
+                    curr_pts = pts[j]
+                    curr_out = output_np[j]
+                    curr_map = mapping_idcs[j]
+                    curr_mask = mask[j].astype(bool)
+                    curr_pts = curr_pts[curr_mask]
+                    curr_out = curr_out[curr_mask]
+                    curr_map = curr_map[curr_mask]
+                    # map predictions to original cloud
+                    prediction = PointCloud(curr_pts, curr_out)
+                    pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j)
+                    map_timing[0] += time.time() - start
+                    map_timing[1] += 1
+    return chunk_timing[0] / chunk_timing[1], model_timing[0] / model_timing[1], map_timing[0] / map_timing[1]
 
 
 def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_path: str,
-               model_type: str = 'state_dict.pth', val_iter: int = 1):
+               model_type: str = 'state_dict.pth', val_iter: int = 1, batch_num: int = -1):
     training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
@@ -123,6 +123,11 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                       label_mappings=argscont.label_mappings, hybrid_mode=argscont.hybrid_mode)
     pm = PredictionMapper(val_path, out_path, th.splitfile)
 
+    if batch_num == -1:
+        batch_size = argscont.batch_size
+    else:
+        batch_size = batch_num
+
     # perform validation
     obj = None
     for obj in th.obj_names:
@@ -134,7 +139,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         print(f"Processing {obj}")
         start = time.time()
         chunk_timing, model_timing, map_timing = \
-            validate_single(th, obj, argscont.batch_size, argscont.sample_num, val_iter, device, model, pm,
+            validate_single(th, obj, batch_size, argscont.sample_num, val_iter, device, model, pm,
                             argscont.input_channels)
         total_timing = time.time() - start
         total_times.append(total_timing)
@@ -170,7 +175,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
 
 def validate_training_set(set_path: str, val_path: str, out_path: str, model_type: str = 'state_dict.pth',
-                          val_iter: int = 1):
+                          val_iter: int = 1, batch_num: int = -1):
     """ Validate multiple trainings.
 
     Args:
@@ -179,6 +184,7 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
         out_path: path where validation folders should get saved.
         model_type: name of model file which should be used.
         val_iter: number of validation iterations.
+        batch_num: Batch size in inference mode can be larger than during training. Default is same as during training.
     """
     set_path = os.path.expanduser(set_path)
     val_path = os.path.expanduser(val_path)
@@ -199,8 +205,4 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
                 print("No arguments found for this training. Skipping...")
                 continue
         validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
-                   val_iter=val_iter)
-
-
-if __name__ == '__main__':
-    validate_training_set('/u/jklimesch/thesis/trainings/past/param_search_2/')
+                   val_iter=val_iter, batch_num=batch_num)
