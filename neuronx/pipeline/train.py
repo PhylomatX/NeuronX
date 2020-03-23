@@ -147,19 +147,19 @@ if __name__ == '__main__':
     density_mode = True
     bio_density = 50
     sample_num = 60000
-    chunk_size = 10000
+    chunk_size = 30000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    normalization = 100000
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/density_50/',
+    normalization = 50000
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/full/',
                              train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/',
                              val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
                              sample_num=sample_num,
-                             name=name + f'_{normalization}',
-                             class_num=3,
-                             train_transforms=[clouds.RandomVariation((-1, 1)), clouds.RandomRotate(),
+                             name=name + f'_co',
+                             class_num=7,
+                             train_transforms=[clouds.RandomVariation((-10, 10)), clouds.RandomRotate(),
                                                clouds.Normalization(normalization), clouds.Center()],
                              batch_size=4,
                              input_channels=4,
@@ -174,7 +174,6 @@ if __name__ == '__main__':
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
-                             label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
                              hybrid_mode=False,
                              scheduler='steplr',
                              optimizer='adam')

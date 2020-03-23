@@ -145,7 +145,7 @@ def eval_single(file: str, total: dict = None, mode: str = 'mvs', target_names: 
     mode += '_skel'
     if filters:
         # apply smoothing filters
-        hc.clean_node_labels()
+        hc.clean_node_labels(neighbor_num=10)
         mode += '_f'
     # remove unpredicted labels
     gtnl, hcnl = handle_unpreds(hc.node_labels, hc.pred_node_labels, drop_unpreds)
@@ -332,6 +332,7 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
         density_data: Tuple of lists, 0: list of densities, 1: list of metrics, keyed by the sample number
         context_data: Tuple of lists, 0: list of chunk sizes 1: list of metrics, keyed by the sample number
     """
+    errors = {'accuracy': 0.015704, 'f1-score': 0.0110688}
     reports_path = os.path.expanduser(reports_path)
     output_path = os.path.expanduser(output_path)
     dataconts = reports2data(reports_path, identifier, cell_key, part_key, class_key, metric_key, points=points)
@@ -345,37 +346,42 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
             for ix, key in enumerate(density_data.keys()):
                 densities = density_data[key][0]
                 metrics = density_data[key][1]
-                ax.scatter(densities, metrics, c=colors[ix], label=ident_labels[data_ix] + ', ' + str(key) + ' points',
-                           marker=markers[data_ix])
-                ax.set_xlabel(r'points/\mu m²')
+                yerr = np.ones(len(metrics)) * errors[data.metric]
+                ax.errorbar(densities, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
+                            label=ident_labels[data_ix] + f'{key} points')
+                ax.set_xlabel(f'point density in 1/\u03BCm²')
                 ax.set_ylabel(data.metric)
         elif not density and not points:
             for ix, key in enumerate(context_data.keys()):
-                contexts = context_data[key][0]
+                contexts = np.array(context_data[key][0])/1000
                 metrics = context_data[key][1]
-                ax.scatter(contexts, metrics, c=colors[ix], label=ident_labels[data_ix] + ', ' + str(key) + ' points',
-                           marker=markers[data_ix])
-                ax.set_xlabel(r'context size in nm')
+                yerr = np.ones(len(metrics)) * errors[data.metric]
+                ax.errorbar(contexts, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
+                            label=ident_labels[data_ix] + f'{key} points')
+                ax.set_xlabel('context size in \u03BCm')
                 ax.set_ylabel(data.metric)
         elif density and points:
             for ix, key in enumerate(density_data.keys()):
                 point_nums = density_data[key][0]
                 metrics = density_data[key][1]
-                ax.scatter(point_nums, metrics, c=colors[ix], label=ident_labels[data_ix] + ', density: ' + str(key),
-                           marker=markers[data_ix])
+                yerr = np.ones(len(metrics)) * errors[data.metric]
+                ax.errorbar(point_nums, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
+                            label=ident_labels[data_ix] + f'point density: {key}/\u03BCm')
                 ax.set_xlabel('number of points')
                 ax.set_ylabel(data.metric)
         elif not density and points:
             for ix, key in enumerate(context_data.keys()):
                 point_nums = context_data[key][0]
                 metrics = context_data[key][1]
-                ax.scatter(point_nums, metrics, c=colors[ix], label=ident_labels[data_ix] + ', chunk size: ' + str(key),
-                           marker=markers[data_ix])
+                yerr = np.ones(len(metrics))*errors[data.metric]
+                ax.errorbar(point_nums, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
+                            label=ident_labels[data_ix] + f'context: {int(key/1000)} \u03BCm')
                 ax.set_xlabel('number of points')
                 ax.set_ylabel(data.metric)
     ax.legend(loc=0)
     ax.grid(True)
-    plt.title(f"{cell_key}, {part_key}")
+    plt.tight_layout()
+    plt.ylim(top=1)
     plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.svg")
 
 
@@ -385,9 +391,9 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
                      density=density)
     generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
                      class_key='accuracy', density=density)
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel_f',
                      density=density)
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel_f',
                      class_key='accuracy', density=density)
 
 
@@ -407,7 +413,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
     out_path = os.path.expanduser(out_path)
     if pipe_steps[0]:
         # run validations
-        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
+        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict_best.pth', val_iter=val_iter,
                                   batch_num=batch_num)
     if pipe_steps[1]:
         # evaluate validations
@@ -415,12 +421,17 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 
 if __name__ == '__main__':
-    # s_path = '~/thesis/results/timings/validation/'
-    # v_path = '~/thesis/gt/20_02_20/poisson_verts2node/'
-    # full_evaluation_pipe(s_path, v_path, eval_name='eval_timing',
-    #                      pipe_steps=[True, True], val_iter=10, batch_num=-1)
+    # start full pipeline
+    s_path = '~/thesis/results/param_search_context/run3/'
+    v_path = '~/thesis/gt/20_02_20/poisson_val/validation/evaluation/'
+    full_evaluation_pipe(s_path, v_path, eval_name='eval_best',
+                         pipe_steps=[True, True], val_iter=5, batch_num=-1)
 
-    r_path = '~/thesis/results/error_calculation/evaluation_fixed3_valiter5_batchsize-1/evaluation_fixed3_mv.pkl'
-    o_path = '~/thesis/results/error_calculation/evaluation_fixed3_valiter5_batchsize-1/'
-    generate_diagrams(r_path, o_path, ['at80', 'at100', 'at32'], ['80.000 steps', '100.000 steps', '32.000 steps'],
-                      points=True, density=True, part_key='mv')
+    # evaluate existing validation again
+    # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
+    # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')
+
+    # r_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/eval_mv_f.pkl'
+    # o_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
+    # generate_diagrams(r_path, o_path, [], [''],
+    #                   points=True, density=False, part_key='mv')
