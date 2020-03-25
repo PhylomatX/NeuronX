@@ -391,9 +391,9 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
                      density=density)
     generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
                      class_key='accuracy', density=density)
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel_f',
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
                      density=density)
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel_f',
+    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
                      class_key='accuracy', density=density)
 
 
@@ -422,16 +422,16 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/results/param_search_context/run3/'
-    v_path = '~/thesis/gt/20_02_20/poisson_val/validation/evaluation/'
-    full_evaluation_pipe(s_path, v_path, eval_name='eval_best',
-                         pipe_steps=[True, True], val_iter=5, batch_num=-1)
+    # s_path = '~/thesis/results/param_search_context/run3/'
+    # v_path = '~/thesis/gt/20_02_20/poisson_val/validation/evaluation/'
+    # full_evaluation_pipe(s_path, v_path, eval_name='eval_best',
+    #                      pipe_steps=[True, True], val_iter=5, batch_num=-1)
 
     # evaluate existing validation again
     # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
     # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')
 
-    # r_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/eval_mv_f.pkl'
-    # o_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
-    # generate_diagrams(r_path, o_path, [], [''],
-    #                   points=True, density=False, part_key='mv')
+    r_path = '~/thesis/results/param_search_context/run3/eval_best_valiter5_batchsize-1/eval_best_mv.pkl'
+    o_path = '~/thesis/results/param_search_context/run3/eval_best_valiter5_batchsize-1/'
+    generate_diagrams(r_path, o_path, [], [''],
+                      points=True, density=False, part_key='mv')

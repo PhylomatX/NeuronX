@@ -57,7 +57,11 @@ class ArgsContainer(object):
         self._features = features
         if self._features is not None:
             for key in self._features.keys():
-                if isinstance(self._features[key], int):
+                if isinstance(self._features[key], dict):
+                    for item in self._features[key]:
+                        if len(self._features[key][item]) != self._input_channels:
+                            raise ValueError("Feature dimension doesn't match with number of input channels.")
+                elif isinstance(self._features[key], int):
                     if self._input_channels != 1:
                         raise ValueError("Feature dimension doesn't match with number of input channels.")
                 elif len(self._features[key]) != self._input_channels:
