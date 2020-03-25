@@ -4,6 +4,7 @@ import torch
 import gpustat
 import glob
 import pickle
+import matplotlib as mpl
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 from math import ceil
@@ -100,14 +101,18 @@ def evaluate_convpoint_data(file_path: str, out_path: str, points: bool = True):
     file_path = os.path.expanduser(file_path)
     out_path = os.path.expanduser(out_path)
     data = basics.load_pkl(file_path)
-    if points:
-        plt.scatter(np.array(data[0])/1e3, np.array(data[1]), c='b', marker='o')
-        plt.xlabel('points per sample in 10³')
-    else:
-        plt.scatter(np.array(data[0]), np.array(data[1]), c='b', marker='o')
-        plt.xlabel('batch number')
+    batch_sizes = np.ceil(850000 / np.array(data[0]))
+    fig, ax = plt.subplots()
+    cmap = mpl.cm.Blues(np.linspace(0, 1, 20))
+    cmap = mpl.colors.ListedColormap(cmap[10:, :-1])
+    sc = ax.scatter(np.array(data[0])/1e3, np.array(data[1]), c=batch_sizes, cmap=cmap, marker='o',
+                    norm=mpl.colors.SymLogNorm(linthresh=0.03, vmin=3, vmax=130), zorder=3)
+    plt.xlabel('points per sample in 10³')
+    cbar = plt.colorbar(sc, ticks=[10, 100])
+    cbar.ax.set_yticklabels(['10', '100'])
+    cbar.set_label('batch size')
     plt.ylabel('time per point in \u03BCs')
-    plt.grid()
+    plt.grid(zorder=0)
     plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
@@ -177,12 +182,12 @@ def create_splitting_diagram(data_path: str, out_path: str, threshold: int):
         times.append(np.mean(curr['timing']))
     slashs = [pos for pos, char in enumerate(data_path) if char == '/']
     name = data_path[slashs[-1] + 1:-4]
-    plt.scatter(nodes, times, marker='o', c='b')
+    plt.scatter(nodes, times, marker='o', c='b', zorder=3)
     plt.xlabel("number of skeleton nodes")
     plt.ylabel("splitting time in s")
-    plt.grid()
+    plt.grid(zorder=0)
     plt.tight_layout()
-    plt.savefig(out_path + f'{name}.svg')
+    plt.savefig(out_path + f'{name}.eps')
     plt.close()
 
 
@@ -230,6 +235,8 @@ def evaluate_val_timings(set_path: str, out_path: str, threshold: int = None):
     eval_data = {}
     for set_di in set_dirs:
         if 'eval' in set_di:
+            if not os.path.isdir(set_path + set_di):
+                continue
             dirs = os.listdir(set_path + set_di + '/')
             val_vertex_nums = None
             eval_vertex_nums = None
@@ -296,24 +303,25 @@ def evaluate_val_timings(set_path: str, out_path: str, threshold: int = None):
     markers = ['o', 'x', '+', 'S', '^', 'H']
     colors = ['b', 'k', 'g', 'r', 'c', 'y', 'm']
     for ix, key in enumerate(val_data):
-        plt.scatter(val_data[key][0]/1e6, val_data[key][1], c=colors[ix], marker=markers[ix], label=f'coverage: {key}')
+        plt.scatter(val_data[key][0]/1e6, val_data[key][1], c=colors[ix], marker=markers[ix], label=f'coverage: {key} %',
+                    zorder=3)
     plt.legend(loc=0)
     plt.xlabel('number of vertices in 10⁶')
     plt.ylabel('timing in s')
     plt.tight_layout()
-    plt.grid()
-    plt.savefig(out_path + 'val_timing.svg')
+    plt.grid(zorder=0)
+    plt.savefig(out_path + 'val_timing.eps')
     plt.close()
 
     for ix, key in enumerate(eval_data):
         plt.scatter(eval_data[key][0]/1e6, eval_data[key][1], c=colors[ix],
-                    marker=markers[ix], label=f'coverage: {key}')
+                    marker=markers[ix], label=f'coverage: {key}', zorder=3)
     plt.legend(loc=0)
     plt.xlabel('number of vertices in 10⁶')
     plt.ylabel('timing in s')
     plt.tight_layout()
-    plt.grid()
-    plt.savefig(out_path + 'eval_timing.svg')
+    plt.grid(zorder=0)
+    plt.savefig(out_path + 'eval_timing.eps')
     plt.close()
 
 
@@ -322,4 +330,5 @@ if __name__ == '__main__':
     # time_splitting('~/thesis/gt/20_02_20/poisson_verts2node/', '~/thesis/results/timings/splitting/',
     #                density_mode=False, chunk_size=20000)
     # time_dataloader('~/thesis/gt/20_02_20/poisson_val/', bio_density=50)
-
+    evaluate_convpoint_data('/u/jklimesch/thesis/results/timings/convpoint/points/ConvPoint_c4_cl7.pkl',
+                            '/u/jklimesch/thesis/results/timings/convpoint/changing_batchsize.eps')
