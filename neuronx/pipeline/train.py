@@ -144,24 +144,24 @@ def training_thread(acont: ArgsContainer):
 if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
-    density_mode = False
+    density_mode = True
     bio_density = 50
-    sample_num = 28000
-    chunk_size = 20000
+    sample_num = 60000
+    chunk_size = 40000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    normalization = chunk_size
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_context/full/',
+    normalization = 50000
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/full/',
                              train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val_my/',
                              val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
                              sample_num=sample_num,
-                             name=name + f'_full_my',
+                             name=name + f'_my',
                              class_num=7,
                              train_transforms=[clouds.RandomVariation((-10, 10)), clouds.RandomRotate(),
                                                clouds.Normalization(normalization), clouds.Center()],
-                             batch_size=8,
+                             batch_size=4,
                              input_channels=5,
                              use_val=False,
                              val_freq=10,
@@ -178,113 +178,3 @@ if __name__ == '__main__':
                              scheduler='steplr',
                              optimizer='adam')
     training_thread(argscont)
-
-    # # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-    # today = date.today().strftime("%Y_%m_%d")
-    # density_mode = True
-    # bio_density = 80
-    # sample_num = 60000
-    # chunk_size = 30000
-    # if density_mode:
-    #     name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
-    # else:
-    #     name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    # normalization = 50000
-    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/density_50/',
-    #                          train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val_my/',
-    #                          val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
-    #                          sample_num=sample_num,
-    #                          name=name + f'_co',
-    #                          class_num=3,
-    #                          train_transforms=[clouds.RandomVariation((-10, 10)), clouds.RandomRotate(),
-    #                                            clouds.Normalization(normalization), clouds.Center()],
-    #                          batch_size=2,
-    #                          input_channels=4,
-    #                          use_val=False,
-    #                          val_freq=10,
-    #                          features={'hc': np.array([1, 0, 0, 0]),
-    #                                    'mi': np.array([0, 1, 0, 0]),
-    #                                    'vc': np.array([0, 0, 1, 0]),
-    #                                    'sy': np.array([0, 0, 0, 1])},
-    #                          chunk_size=chunk_size,
-    #                          tech_density=1500,
-    #                          bio_density=bio_density,
-    #                          density_mode=density_mode,
-    #                          max_step_size=10000000,
-    #                          hybrid_mode=False,
-    #                          label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
-    #                          scheduler='steplr',
-    #                          optimizer='adam')
-    # training_thread(argscont)
-
-    # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-    # today = date.today().strftime("%Y_%m_%d")
-    # density_mode = True
-    # bio_density = 80
-    # sample_num = 60000
-    # chunk_size = 30000
-    # if density_mode:
-    #     name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
-    # else:
-    #     name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    # normalization = 50000
-    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/full/',
-    #                          train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val_my/',
-    #                          val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
-    #                          sample_num=sample_num,
-    #                          name=name + f'',
-    #                          class_num=7,
-    #                          train_transforms=[clouds.RandomVariation((-10, 10)), clouds.RandomRotate(),
-    #                                            clouds.Normalization(normalization), clouds.Center()],
-    #                          batch_size=2,
-    #                          input_channels=1,
-    #                          use_val=False,
-    #                          val_freq=10,
-    #                          features={'hc': 1},
-    #                          chunk_size=chunk_size,
-    #                          tech_density=1500,
-    #                          bio_density=bio_density,
-    #                          density_mode=density_mode,
-    #                          max_step_size=10000000,
-    #                          hybrid_mode=True,
-    #                          scheduler='steplr',
-    #                          optimizer='adam')
-    # training_thread(argscont)
-
-    # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-    # today = date.today().strftime("%Y_%m_%d")
-    # density_mode = False
-    # bio_density = 80
-    # sample_num = 28000
-    # chunk_size = 10000
-    # if density_mode:
-    #     name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
-    # else:
-    #     name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    # normalization = chunk_size
-    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_context/run4/',
-    #                          train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val_my/',
-    #                          val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
-    #                          sample_num=sample_num,
-    #                          name=name + f'_co',
-    #                          class_num=3,
-    #                          train_transforms=[clouds.RandomVariation((-10, 10)), clouds.RandomRotate(),
-    #                                            clouds.Normalization(normalization), clouds.Center()],
-    #                          batch_size=8,
-    #                          input_channels=4,
-    #                          use_val=False,
-    #                          val_freq=10,
-    #                          features={'hc': np.array([1, 0, 0, 0]),
-    #                                    'mi': np.array([0, 1, 0, 0]),
-    #                                    'vc': np.array([0, 0, 1, 0]),
-    #                                    'sy': np.array([0, 0, 0, 1])},
-    #                          chunk_size=chunk_size,
-    #                          tech_density=1500,
-    #                          bio_density=bio_density,
-    #                          density_mode=density_mode,
-    #                          max_step_size=10000000,
-    #                          hybrid_mode=False,
-    #                          label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
-    #                          scheduler='steplr',
-    #                          optimizer='adam')
-    # training_thread(argscont)

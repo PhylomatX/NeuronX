@@ -3,6 +3,7 @@ import re
 import glob
 import pickle
 import numpy as np
+import matplotlib as mpl
 from tqdm import tqdm
 from morphx.data import basics
 from syconn import global_params
@@ -247,26 +248,30 @@ def eval_gt(data_path: str, out_path: str, name: str):
     for i in range(7):
         ttypes.append(i + 2)
         tpercs.append(data[i] * 100)
+    fontsize = 20
+    mpl.rcParams.update({'figure.autolayout': True})
     fig, ax = plt.subplots()
     ax.scatter(types, percs, c='k', marker='o', s=10, zorder=3, label='SSVs')
     ax.scatter(ttypes, tpercs, c='b', marker='o', s=30, zorder=4, label='total')
     ax.grid(zorder=0)
-    ax.set_ylabel('percentage %')
-    ax.legend(loc=0)
+    ax.set_ylabel('percentage %', fontsize=fontsize)
+    ax.legend(loc=0, fontsize=fontsize)
     plt.ylim(top=100)
     plt.tight_layout()
-    plt.xticks(types, ['my', 'de', 'ax', 'so', 'bo', 'te', 'ne', 'he'])
+    plt.yticks(fontsize=fontsize)
+    plt.xticks(types, ['my', 'de', 'ax', 'so', 'bo', 'te', 'ne', 'he'], fontsize=fontsize)
     plt.savefig(out_path + name + '_types.eps')
     plt.close()
 
     fig, ax = plt.subplots()
     ax.scatter(area_type, areas, c='k', marker='o', s=10, zorder=3)
     ax.grid(zorder=0)
-    ax.set_ylabel('area in \u03BCm²')
+    ax.set_ylabel('area in \u03BCm²', fontsize=fontsize, labelpad=20)
     plt.yscale('symlog')
     plt.tight_layout()
     plt.ylim(bottom=0)
-    plt.xticks(area_type, ['cell', 'mi', 'sj', 'vc'])
+    plt.yticks(fontsize=fontsize)
+    plt.xticks(area_type, ['cell', 'mi', 'sj', 'vc'], fontsize=fontsize)
     plt.savefig(out_path + name + '_areas.eps')
     plt.close()
 
@@ -417,4 +422,5 @@ if __name__ == '__main__':
     # produce_set_info()
     # eval_set_info('/u/jklimesch/thesis/results/gt/train_info.pkl', '/u/jklimesch/thesis/results/gt/', 'train_gt2')
     # eval_set_info('/u/jklimesch/thesis/results/gt/eval_info.pkl', '/u/jklimesch/thesis/results/gt/', 'eval_gt2')
+    eval_gt('~/thesis/results/gt/eval_gt2.pkl', '~/thesis/results/gt/', 'eval')
     eval_gt('~/thesis/results/gt/train_gt2.pkl', '~/thesis/results/gt/', 'train')

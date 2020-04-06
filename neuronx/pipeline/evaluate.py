@@ -244,7 +244,8 @@ def summarize_reports(set_path: str, eval_name: str):
 # -------------------------------------- DIAGRAM GENERATION ------------------------------------------- #
 
 def reports2data(reports_path: str, identifier: List[str], cell_key: str = 'total', part_key: str = 'mv',
-                 class_key: str = 'macro avg', metric_key: str = 'f1-score', points: bool = False):
+                 class_key: str = 'macro avg', metric_key: str = 'f1-score', points: bool = False,
+                 filter_identifier: bool = False, neg_identifier: List[str] = None):
     """ Extracts the requested metric from the reports file at reports_path and creates a datacontainer
         which can then be transformed into a diagram.
 
@@ -271,10 +272,16 @@ def reports2data(reports_path: str, identifier: List[str], cell_key: str = 'tota
         keys = []
         for key in reports.keys():
             if ix >= len(identifier):
-                keys.append(key)
+                if not filter_identifier:
+                    keys.append(key)
             else:
                 if identifier[ix] in key:
-                    keys.append(key)
+                    valid = True
+                    for neg_ident in neg_identifier:
+                        if neg_ident in key:
+                            valid = False
+                    if valid:
+                        keys.append(key)
         density_data = {}
         context_data = {}
         for key in keys:
@@ -326,18 +333,21 @@ def reports2data(reports_path: str, identifier: List[str], cell_key: str = 'tota
 
 def generate_diagram(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
                      cell_key: str = 'total', part_key: str = 'mv', class_key: str = 'macro avg',
-                     metric_key: str = 'f1-score', density: bool = True, points: bool = False):
+                     metric_key: str = 'f1-score', density: bool = True, points: bool = False,
+                     filter_identifier: bool = False, neg_identifier: List[str] = None):
     """ Generates diagram which visualizes the parameter search.
         data structure:
         density_data: Tuple of lists, 0: list of densities, 1: list of metrics, keyed by the sample number
         context_data: Tuple of lists, 0: list of chunk sizes 1: list of metrics, keyed by the sample number
     """
-    errors = {'accuracy': 0.015704, 'f1-score': 0.0110688}
     reports_path = os.path.expanduser(reports_path)
     output_path = os.path.expanduser(output_path)
-    dataconts = reports2data(reports_path, identifier, cell_key, part_key, class_key, metric_key, points=points)
+    dataconts = reports2data(reports_path, identifier, cell_key, part_key, class_key, metric_key, points=points,
+                             filter_identifier=filter_identifier, neg_identifier=neg_identifier)
     fig, ax = plt.subplots()
     markers = ['o', 'x', '+', 'S', '^', 'H']
+    fontsize = 15
+    labelpad = 10
     for data_ix, data in enumerate(dataconts):
         density_data = data.density_data
         context_data = data.context_data
@@ -346,55 +356,54 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
             for ix, key in enumerate(density_data.keys()):
                 densities = density_data[key][0]
                 metrics = density_data[key][1]
-                yerr = np.ones(len(metrics)) * errors[data.metric]
-                ax.errorbar(densities, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
-                            label=ident_labels[data_ix] + f'{key} points')
-                ax.set_xlabel(f'point density in 1/\u03BCm²')
-                ax.set_ylabel(data.metric)
+                ax.scatter(densities, metrics, marker=markers[data_ix], c=colors[ix], zorder=3,
+                           label=ident_labels[data_ix] + f'{key} points')
+                ax.set_xlabel(f'density in 1/\u03BC m²', fontsize=fontsize, labelpad=10)
+                ax.set_ylabel(data.metric, fontsize=fontsize, labelpad=10)
         elif not density and not points:
             for ix, key in enumerate(context_data.keys()):
                 contexts = np.array(context_data[key][0])/1000
                 metrics = context_data[key][1]
-                yerr = np.ones(len(metrics)) * errors[data.metric]
-                ax.errorbar(contexts, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
-                            label=ident_labels[data_ix] + f'{key} points')
-                ax.set_xlabel('context size in \u03BCm')
-                ax.set_ylabel(data.metric)
+                ax.scatter(contexts, metrics, marker=markers[data_ix], c=colors[ix], zorder=3,
+                           label=ident_labels[data_ix] + f'{int(key/1e3)}k points')
+                ax.set_xlabel('context size in \u03BCm', fontsize=fontsize, labelpad=10)
+                ax.set_ylabel(data.metric, fontsize=fontsize, labelpad=10)
         elif density and points:
             for ix, key in enumerate(density_data.keys()):
-                point_nums = density_data[key][0]
+                point_nums = np.array(density_data[key][0])
                 metrics = density_data[key][1]
-                yerr = np.ones(len(metrics)) * errors[data.metric]
-                ax.errorbar(point_nums, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
-                            label=ident_labels[data_ix] + f'point density: {key}/\u03BCm')
-                ax.set_xlabel('number of points')
-                ax.set_ylabel(data.metric)
+                ax.scatter(np.round(point_nums/1e3), metrics, marker=markers[data_ix], c=colors[ix], zorder=3,
+                           label=ident_labels[data_ix] + f'{key} p/\u03BCm²')
+                ax.set_xlabel('number of points in 10³', fontsize=fontsize, labelpad=10)
+                ax.set_ylabel(data.metric, fontsize=fontsize, labelpad=10)
         elif not density and points:
             for ix, key in enumerate(context_data.keys()):
-                point_nums = context_data[key][0]
+                point_nums = np.array(context_data[key][0])
                 metrics = context_data[key][1]
-                yerr = np.ones(len(metrics))*errors[data.metric]
-                ax.errorbar(point_nums, metrics, yerr=yerr, fmt=markers[data_ix] + colors[ix], capsize=2,
-                            label=ident_labels[data_ix] + f'context: {int(key/1000)} \u03BCm')
-                ax.set_xlabel('number of points')
-                ax.set_ylabel(data.metric)
-    ax.legend(loc=0)
-    ax.grid(True)
+                ax.scatter((point_nums/1e3), metrics, marker=markers[data_ix], c=colors[ix], zorder=3,
+                           label=ident_labels[data_ix] + f'{int(key/1000)} \u03BCm')
+                ax.set_xlabel('number of points in 10³', fontsize=fontsize, labelpad=10)
+                ax.set_ylabel(data.metric, fontsize=fontsize, labelpad=10)
+    plt.xticks(fontsize=fontsize)
+    plt.yticks(fontsize=fontsize)
+    ax.legend(loc=0, fontsize=fontsize, ncol=1)
+    ax.grid(True, zorder=0)
     plt.tight_layout()
-    plt.ylim(top=1)
-    plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.svg")
+    plt.ylim(top=1, bottom=0.4)
+    plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.eps")
 
 
 def generate_diagrams(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
-                      points: bool, density: bool, part_key: str = 'mv'):
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
-                     density=density)
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
-                     class_key='accuracy', density=density)
+                      points: bool, density: bool, part_key: str = 'mv', filter_identifier: bool = False,
+                      neg_identifier: List[str] = None):
+    # generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
+    #                  density=density, filter_identifier=filter_identifier)
+    # generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
+    #                  class_key='accuracy', density=density, filter_identifier=filter_identifier)
     generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
-                     density=density)
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
-                     class_key='accuracy', density=density)
+                     density=density, filter_identifier=filter_identifier, neg_identifier=neg_identifier)
+    # generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
+    #                  class_key='accuracy', density=density, filter_identifier=filter_identifier)
 
 
 # -------------------------------------- PIPELINE METHODS ------------------------------------------- #
@@ -402,8 +411,9 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
 def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
                          drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
                          part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
-                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2, batch_num: int = -1):
-    """ Runs full pipeline on given training set (including validation, evaluation and diagram generation. """
+                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2, batch_num: int = -1,
+                         save_worst_examples: bool = False):
+    """ Runs full pipeline on given training set including validation and evaluation. """
     if pipe_steps is None:
         pipe_steps = [True, True]
     out_path = set_path + f'{eval_name}_valiter{val_iter}_batchsize{batch_num}/'
@@ -411,10 +421,14 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
     set_path = os.path.expanduser(set_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
+    if save_worst_examples:
+        cloud_out_path = out_path
+    else:
+        cloud_out_path = None
     if pipe_steps[0]:
         # run validations
-        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict_best.pth', val_iter=val_iter,
-                                  batch_num=batch_num)
+        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
+                                  batch_num=batch_num, cloud_out_path=cloud_out_path)
     if pipe_steps[1]:
         # evaluate validations
         evaluate_validation_set(out_path, total, mode, filters, drop_unpreds, data_type, eval_name=eval_name)
@@ -422,16 +436,18 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    # s_path = '~/thesis/results/param_search_context/run3/'
-    # v_path = '~/thesis/gt/20_02_20/poisson_val/validation/evaluation/'
-    # full_evaluation_pipe(s_path, v_path, eval_name='eval_best',
-    #                      pipe_steps=[True, True], val_iter=5, batch_num=-1)
+    # s_path = '~/thesis/results/param_search_density/full/intermediate6/'
+    # v_path = '~/thesis/gt/20_02_20/poisson_val_my/validation/'
+    # full_evaluation_pipe(s_path, v_path, eval_name='eval_f', pipe_steps=[True, True], val_iter=5, batch_num=-1,
+    #                      save_worst_examples=False)
 
     # evaluate existing validation again
     # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
     # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')
 
-    r_path = '~/thesis/results/param_search_context/run3/eval_best_valiter5_batchsize-1/eval_best_mv.pkl'
-    o_path = '~/thesis/results/param_search_context/run3/eval_best_valiter5_batchsize-1/'
-    generate_diagrams(r_path, o_path, [], [''],
-                      points=True, density=False, part_key='mv')
+    # summarize_reports('~/thesis/results/param_search_density/full/intermediate6/eval_f_valiter5_batchsize-1/', 'eval_f_mv')
+
+    o_path = '~/thesis/results/param_search_context/full/intermediate6/eval_f_valiter5_batchsize-1/'
+    r_path = o_path + 'eval_f_mv.pkl'
+    generate_diagrams(r_path, o_path, [''], [''], points=True, density=False, part_key='mv',
+                      filter_identifier=False, neg_identifier=[])

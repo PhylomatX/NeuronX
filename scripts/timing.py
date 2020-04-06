@@ -14,7 +14,6 @@ from morphx.processing import ensembles, objects, clouds
 from elektronn3.models.convpoint import SegBig
 from morphx.data.torchhandler import TorchHandler
 
-
 @torch.no_grad()
 def time_convpoint_points(out_path: str, input_channels: int = 4, nclasses: int = 3):
     out_path = os.path.expanduser(out_path)
@@ -96,7 +95,7 @@ def time_convpoint_batches(out_path: str, input_channels: int = 4, nclasses: int
         pickle.dump((batch_sizes, times), f)
 
 
-def evaluate_convpoint_data(file_path: str, out_path: str, points: bool = True):
+def evaluate_convpoint_data(file_path: str, out_path: str, points: bool = True, fontsize: int = 15):
     """ ConvPoint data: [points / batches, timings] """
     file_path = os.path.expanduser(file_path)
     out_path = os.path.expanduser(out_path)
@@ -107,11 +106,13 @@ def evaluate_convpoint_data(file_path: str, out_path: str, points: bool = True):
     cmap = mpl.colors.ListedColormap(cmap[10:, :-1])
     sc = ax.scatter(np.array(data[0])/1e3, np.array(data[1]), c=batch_sizes, cmap=cmap, marker='o',
                     norm=mpl.colors.SymLogNorm(linthresh=0.03, vmin=3, vmax=130), zorder=3)
-    plt.xlabel('points per sample in 10³')
+    plt.xlabel('points per sample in 10³', fontsize=fontsize, labelpad=15)
     cbar = plt.colorbar(sc, ticks=[10, 100])
-    cbar.ax.set_yticklabels(['10', '100'])
-    cbar.set_label('batch size')
-    plt.ylabel('time per point in \u03BCs')
+    cbar.ax.set_yticklabels(['10', '100'], fontsize=fontsize)
+    cbar.set_label('batch size', fontsize=fontsize)
+    plt.xticks(fontsize=fontsize)
+    plt.yticks(fontsize=fontsize)
+    plt.ylabel('time per point in \u03BCs', fontsize=fontsize, labelpad=15)
     plt.grid(zorder=0)
     plt.tight_layout()
     plt.savefig(out_path)
@@ -166,7 +167,7 @@ def time_splitting(data_path: str, out_path: str, bio_density: float = None, cap
         pickle.dump(timing_info, f)
 
 
-def create_splitting_diagram(data_path: str, out_path: str, threshold: int):
+def create_splitting_diagram(data_path: str, out_path: str, threshold: int, fontsize: int = 15):
     """ Splitting data: dict, 1. key: sso file, 2. keys: nodes, vertices, timing (multiple values).
         threshold is for removing outlier. """
     data_path = os.path.expanduser(data_path)
@@ -182,12 +183,14 @@ def create_splitting_diagram(data_path: str, out_path: str, threshold: int):
         times.append(np.mean(curr['timing']))
     slashs = [pos for pos, char in enumerate(data_path) if char == '/']
     name = data_path[slashs[-1] + 1:-4]
-    plt.scatter(nodes, times, marker='o', c='b', zorder=3)
-    plt.xlabel("number of skeleton nodes")
-    plt.ylabel("splitting time in s")
+    plt.scatter(np.array(nodes)/1e3, times, marker='o', c='b', zorder=3)
+    plt.xlabel("number of skeleton nodes in 10³", fontsize=fontsize, labelpad=15)
+    plt.ylabel("splitting time in s", fontsize=fontsize, labelpad=15)
+    plt.xticks(fontsize=fontsize)
+    plt.yticks(fontsize=fontsize)
     plt.grid(zorder=0)
     plt.tight_layout()
-    plt.savefig(out_path + f'{name}.eps')
+    plt.savefig(out_path + f'split_timing.eps')
     plt.close()
 
 
@@ -227,7 +230,7 @@ def time_dataloader(data_path: str, sample_num: int = 28000, class_num: int = 7,
     # print(total_time/(5*len(ds)))
 
 
-def evaluate_val_timings(set_path: str, out_path: str, threshold: int = None):
+def evaluate_val_timings(set_path: str, out_path: str, threshold: int = None, fontsize: int = 15):
     out_path = os.path.expanduser(out_path)
     set_path = os.path.expanduser(set_path)
     set_dirs = os.listdir(set_path)
@@ -303,11 +306,13 @@ def evaluate_val_timings(set_path: str, out_path: str, threshold: int = None):
     markers = ['o', 'x', '+', 'S', '^', 'H']
     colors = ['b', 'k', 'g', 'r', 'c', 'y', 'm']
     for ix, key in enumerate(val_data):
-        plt.scatter(val_data[key][0]/1e6, val_data[key][1], c=colors[ix], marker=markers[ix], label=f'coverage: {key} %',
-                    zorder=3)
-    plt.legend(loc=0)
-    plt.xlabel('number of vertices in 10⁶')
-    plt.ylabel('timing in s')
+        plt.scatter(val_data[key][0]/1e6, val_data[key][1], c=colors[ix], marker=markers[ix],
+                    label=f'coverage: {int(key)} %', zorder=3)
+    plt.legend(loc=0, fontsize=fontsize)
+    plt.xlabel('number of vertices in 10⁶', fontsize=fontsize, labelpad=15)
+    plt.ylabel('timing in s', fontsize=fontsize, labelpad=15)
+    plt.xticks(fontsize=fontsize)
+    plt.yticks(fontsize=fontsize)
     plt.tight_layout()
     plt.grid(zorder=0)
     plt.savefig(out_path + 'val_timing.eps')
@@ -315,10 +320,12 @@ def evaluate_val_timings(set_path: str, out_path: str, threshold: int = None):
 
     for ix, key in enumerate(eval_data):
         plt.scatter(eval_data[key][0]/1e6, eval_data[key][1], c=colors[ix],
-                    marker=markers[ix], label=f'coverage: {key}', zorder=3)
-    plt.legend(loc=0)
-    plt.xlabel('number of vertices in 10⁶')
-    plt.ylabel('timing in s')
+                    marker=markers[ix], label=f'coverage: {int(key)}', zorder=3)
+    plt.legend(loc=0, fontsize=fontsize)
+    plt.xlabel('number of vertices in 10⁶', fontsize=fontsize, labelpad=15)
+    plt.ylabel('timing in s', fontsize=fontsize, labelpad=15)
+    plt.xticks(fontsize=fontsize)
+    plt.yticks(fontsize=fontsize)
     plt.tight_layout()
     plt.grid(zorder=0)
     plt.savefig(out_path + 'eval_timing.eps')
@@ -330,5 +337,12 @@ if __name__ == '__main__':
     # time_splitting('~/thesis/gt/20_02_20/poisson_verts2node/', '~/thesis/results/timings/splitting/',
     #                density_mode=False, chunk_size=20000)
     # time_dataloader('~/thesis/gt/20_02_20/poisson_val/', bio_density=50)
+
+    fontsize = 15
+    mpl.rcParams.update({'figure.autolayout': True})
     evaluate_convpoint_data('/u/jklimesch/thesis/results/timings/convpoint/points/ConvPoint_c4_cl7.pkl',
-                            '/u/jklimesch/thesis/results/timings/convpoint/changing_batchsize.eps')
+                            '/u/jklimesch/thesis/results/timings/summary/model_timing.eps')
+    create_splitting_diagram('/u/jklimesch/thesis/results/timings/splitting/data/density_d50_c32768_simple.pkl',
+                             '/u/jklimesch/thesis/results/timings/summary/', threshold=30000)
+    evaluate_val_timings('/u/jklimesch/thesis/results/timings/validation/',
+                         '/u/jklimesch/thesis/results/timings/summary/', threshold=20)
