@@ -34,7 +34,8 @@ class ArgsContainer(object):
                  label_mappings: List[Tuple[int, int]] = None,
                  hybrid_mode: bool = False,
                  optimizer: str = 'adam',
-                 scheduler: str = 'steplr'):
+                 scheduler: str = 'steplr',
+                 splitting_redundancy: int = 1):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -104,6 +105,7 @@ class ArgsContainer(object):
         self._hybrid_mode = hybrid_mode
         self._optimizer = optimizer
         self._scheduler = scheduler
+        self._splitting_redundancy = splitting_redundancy
 
     @property
     def normalization(self):
@@ -118,10 +120,6 @@ class ArgsContainer(object):
     @property
     def train_path(self):
         return self._train_path
-
-    @property
-    def val_save_path(self):
-        return self._val_save_path
 
     @property
     def train_save_path(self):
@@ -212,10 +210,6 @@ class ArgsContainer(object):
         return self._input_channels
 
     @property
-    def val_info_path(self):
-        return self._val_info_path
-
-    @property
     def label_mappings(self):
         return self._label_mappings
 
@@ -230,6 +224,10 @@ class ArgsContainer(object):
     @property
     def scheduler(self):
         return self._scheduler
+
+    @property
+    def splitting_redundancy(self):
+        return self._splitting_redundancy
 
     @property
     def attr_dict(self):
@@ -259,7 +257,8 @@ class ArgsContainer(object):
                      'label_mappings': self._label_mappings,
                      'hybrid_mode': self._hybrid_mode,
                      'optimizer': self._optimizer,
-                     'scheduler': self._scheduler}
+                     'scheduler': self._scheduler,
+                     'splitting_redundancy': self._splitting_redundancy}
         return attr_dict
 
     def save2pkl(self, path: str):
@@ -276,30 +275,3 @@ class ArgsContainer(object):
         """
         self.__init__(**basics.load_pkl(path))
         return self
-
-def args2container_14(file: str) -> ArgsContainer:
-    """ Provides backward compatibility for trainings started on 2020_03_14"""
-    args = basics.load_pkl(file)
-    slashs = [pos for pos, char in enumerate(file) if char == '/']
-    current_save_root = file[:slashs[-2]+1]
-
-    return ArgsContainer(save_root=current_save_root, train_path=args[1], chunk_size=args[2], sample_num=args[3],
-                         name=args[4], class_num=args[5], train_transforms=args[6], val_transforms=args[7],
-                         batch_size=args[8], use_cuda=args[9], input_channels=args[10], use_big=args[11],
-                         random_seed=args[12], val_path=args[13], track_running_stats=args[14], use_val=args[15],
-                         features=args[16], tech_density=args[17], bio_density=args[18], density_mode=args[19],
-                         val_iter=args[20], val_freq=args[21], max_step_size=args[23], label_mappings=args[24])
-
-
-def args2container_13(file: str) -> ArgsContainer:
-    """ Provides backward compatibility for trainings started on or before 2020_03_13"""
-    args = basics.load_pkl(file)
-    slashs = [pos for pos, char in enumerate(file) if char == '/']
-    current_save_root = file[:slashs[-2]+1]
-
-    return ArgsContainer(save_root=current_save_root, train_path=args[1], chunk_size=args[2], sample_num=args[3],
-                         name=args[4], class_num=args[5], train_transforms=args[6], val_transforms=args[7],
-                         batch_size=args[8], use_cuda=args[9], input_channels=args[10], use_big=args[11],
-                         random_seed=args[12], val_path=args[13], track_running_stats=args[14], use_val=args[15],
-                         features=args[16], tech_density=args[17], bio_density=args[18], density_mode=args[19],
-                         val_iter=args[20], val_freq=args[21], max_step_size=args[23])

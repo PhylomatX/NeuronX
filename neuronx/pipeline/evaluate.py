@@ -209,7 +209,7 @@ def evaluate_validation_set(set_path: str, total=True, mode: str = 'mvs', filter
 def handle_unpreds(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
     """ Removes labels which equal -1. """
     if drop:
-        mask = np.logical_and(hc != -1, gt != -1)
+        mask = np.logical_and(gt != -1, hc != -1)
         return gt[mask], hc[mask]
     else:
         return gt, hc
@@ -240,8 +240,6 @@ def summarize_reports(set_path: str, eval_name: str):
         reports[di] = report
     basics.save2pkl(reports, set_path, name=eval_name)
 
-
-# -------------------------------------- DIAGRAM GENERATION ------------------------------------------- #
 
 def reports2data(reports_path: str, identifier: List[str], cell_key: str = 'total', part_key: str = 'mv',
                  class_key: str = 'macro avg', metric_key: str = 'f1-score', points: bool = False,
@@ -331,6 +329,8 @@ def reports2data(reports_path: str, identifier: List[str], cell_key: str = 'tota
     return dataconts
 
 
+# -------------------------------------- DIAGRAM GENERATION ------------------------------------------- #
+
 def generate_diagram(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
                      cell_key: str = 'total', part_key: str = 'mv', class_key: str = 'macro avg',
                      metric_key: str = 'f1-score', density: bool = True, points: bool = False,
@@ -409,11 +409,15 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
 # -------------------------------------- PIPELINE METHODS ------------------------------------------- #
 
 def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
-                         drop_unpreds: bool = True, data_type: str = 'ce', cell_key: str = 'total',
-                         part_key: str = 'mv', class_key: str = 'macro avg', metric_key: str = 'f1-score',
-                         eval_name: str = 'evaluation', pipe_steps=None, val_iter=2, batch_num: int = -1,
-                         save_worst_examples: bool = False):
-    """ Runs full pipeline on given training set including validation and evaluation. """
+                         drop_unpreds: bool = True, data_type: str = 'ce', eval_name: str = 'evaluation',
+                         pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
+                         val_type: str = 'training_set', model_freq: int = 1):
+    """ Runs full pipeline on given training set including validation and evaluation.
+
+    Args:
+        val_type: 'training_set' for using the 'validate_training_set' validation method or 'multiple_model' for
+            using the 'validate_multi_model_training' validation method.
+    """
     if pipe_steps is None:
         pipe_steps = [True, True]
     out_path = set_path + f'{eval_name}_valiter{val_iter}_batchsize{batch_num}/'
@@ -427,8 +431,14 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
         cloud_out_path = None
     if pipe_steps[0]:
         # run validations
-        val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
-                                  batch_num=batch_num, cloud_out_path=cloud_out_path)
+        if val_type == 'training_set':
+            val.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
+                                      batch_num=batch_num, cloud_out_path=cloud_out_path)
+        elif val_type == 'multiple_model':
+            val.validate_multi_model_training(set_path, val_path, out_path, model_freq, val_iter=val_iter,
+                                              batch_num=batch_num, cloud_out_path=cloud_out_path)
+        else:
+            raise ValueError("val_type not known.")
     if pipe_steps[1]:
         # evaluate validations
         evaluate_validation_set(out_path, total, mode, filters, drop_unpreds, data_type, eval_name=eval_name)
@@ -436,18 +446,19 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    # s_path = '~/thesis/results/param_search_density/full/intermediate6/'
-    # v_path = '~/thesis/gt/20_02_20/poisson_val_my/validation/'
-    # full_evaluation_pipe(s_path, v_path, eval_name='eval_f', pipe_steps=[True, True], val_iter=5, batch_num=-1,
-    #                      save_worst_examples=False)
+    s_path = '~/thesis/current_work/4-class/2020_04_11_40000_100000axon/'
+    v_path = '~/thesis/gt/20_04_09/evaluation/'
+    full_evaluation_pipe(s_path, v_path, eval_name='eval_f', pipe_steps=[True, True], val_iter=5, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=50)
 
     # evaluate existing validation again
     # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
     # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')
 
-    # summarize_reports('~/thesis/results/param_search_density/full/intermediate6/eval_f_valiter5_batchsize-1/', 'eval_f_mv')
+    # summarize_reports('~/thesis/results/param_search_density/full/intermediate6/eval_f_valiter5_batchsize-1/',
+    # 'eval_f_mv')
 
-    o_path = '~/thesis/results/param_search_context/full/intermediate6/eval_f_valiter5_batchsize-1/'
-    r_path = o_path + 'eval_f_mv.pkl'
-    generate_diagrams(r_path, o_path, [''], [''], points=True, density=False, part_key='mv',
-                      filter_identifier=False, neg_identifier=[])
+    # o_path = '~/thesis/results/param_search_context/full/intermediate6/eval_f_valiter5_batchsize-1/'
+    # r_path = o_path + 'eval_f_mv.pkl'
+    # generate_diagrams(r_path, o_path, [''], [''], points=True, density=False, part_key='mv',
+    #                   filter_identifier=False, neg_identifier=[])

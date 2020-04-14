@@ -140,5 +140,5 @@ def generate_verts2node(input_path: str, output_path: str):
 
 
 if __name__ == '__main__':
-    generate_verts2node('~/thesis/gt/20_02_20/',
-                        '~/thesis/gt/20_02_20/')
+    generate_verts2node('~/thesis/gt/20_04_09/new/',
+                        '~/thesis/gt/20_04_09/new/')

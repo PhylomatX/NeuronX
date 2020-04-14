@@ -67,7 +67,8 @@ def training_thread(acont: ArgsContainer):
                             transform=train_transforms,
                             obj_feats=acont.features,
                             label_mappings=acont.label_mappings,
-                            hybrid_mode=acont.hybrid_mode)
+                            hybrid_mode=acont.hybrid_mode,
+                            splitting_redundancy=acont.splitting_redundancy)
     if acont.use_val:
         val_transforms = clouds.Compose(acont.val_transforms)
         val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
@@ -78,7 +79,8 @@ def training_thread(acont: ArgsContainer):
                               transform=val_transforms,
                               obj_feats=acont.features,
                               label_mappings=acont.label_mappings,
-                              hybrid_mode=acont.hybrid_mode)
+                              hybrid_mode=acont.hybrid_mode,
+                              splitting_redundancy=acont.splitting_redundancy)
 
         # trainer3D was updated to new validation, so prediction mapping is not necessary any more.
         pm = None
@@ -144,37 +146,39 @@ def training_thread(acont: ArgsContainer):
 if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
-    density_mode = True
+    density_mode = False
     bio_density = 50
-    sample_num = 60000
+    sample_num = 100000
     chunk_size = 40000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    normalization = 50000
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/results/param_search_density/full/',
-                             train_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val_my/',
-                             val_path='/u/jklimesch/thesis/gt/20_02_20/poisson_val/validation/',
+    normalization = chunk_size
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/4-class/',
+                             train_path='/u/jklimesch/thesis/gt/20_04_09/',
                              sample_num=sample_num,
-                             name=name + f'_my',
-                             class_num=7,
-                             train_transforms=[clouds.RandomVariation((-10, 10)), clouds.RandomRotate(),
-                                               clouds.Normalization(normalization), clouds.Center()],
-                             batch_size=4,
-                             input_channels=5,
+                             name=name + f'_re',
+                             class_num=4,
+                             train_transforms=[clouds.RandomVariation((-100, 100)),
+                                               clouds.RandomShear(limits=(-0.3, 0.3)),
+                                               clouds.RandomRotate(), clouds.Normalization(normalization),
+                                               clouds.Center()],
+                             batch_size=2,
+                             input_channels=4,
                              use_val=False,
-                             val_freq=10,
-                             features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
-                                       'mi': np.array([0, 0, 1, 0, 0]),
-                                       'vc': np.array([0, 0, 0, 1, 0]),
-                                       'sy': np.array([0, 0, 0, 0, 1])},
+                             features={'hc': np.array([1, 0, 0, 0]),
+                                       'mi': np.array([0, 1, 0, 0]),
+                                       'vc': np.array([0, 0, 1, 0]),
+                                       'sy': np.array([0, 0, 0, 1])},
                              chunk_size=chunk_size,
                              tech_density=1500,
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
                              hybrid_mode=False,
+                             label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)],
                              scheduler='steplr',
-                             optimizer='adam')
+                             optimizer='adam',
+                             splitting_redundancy=2)
     training_thread(argscont)

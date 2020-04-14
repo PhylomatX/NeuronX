@@ -1,4 +1,5 @@
 import os
+import glob
 import math
 import torch
 import time
@@ -13,7 +14,7 @@ from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegSmall, SegBig
-from neuronx.classes.argscontainer import ArgsContainer, args2container_14
+from neuronx.classes.argscontainer import ArgsContainer
 
 
 @torch.no_grad()
@@ -84,16 +85,11 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                         if loss > t_loss:
                             worst_ix = j
                             t_loss = loss
-                        curr_output = np.argmax(curr_output, axis=1)
-                        target_curr = PointCloud(pts[j], targets[j])
-                        output_curr = PointCloud(pts[j][l_mask[j].astype(bool)], curr_output)
-                        curr = [target_curr, output_curr]
-                        basics.save2pkl(curr, out_path, f'{hc}_i{i}_b{batch}_i{j}')
-                # worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
-                # target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
-                # output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)
-                # worst = [target_cloud, output_cloud]
-                # basics.save2pkl(worst, out_path, f'{hc}_i{i}_b{batch}_i{worst_ix}')
+                worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
+                target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
+                output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)
+                worst = [target_cloud, output_cloud]
+                basics.save2pkl(worst, out_path, f'{hc}_i{i}_b{batch}_i{worst_ix}')
 
             # apply argmax to outputs
             output_np = np.argmax(output_np, axis=2)
@@ -140,7 +136,8 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     full = torch.load(training_path + model_type)
-    model.load_state_dict(full['model_state_dict'])
+    model.load_state_dict(full)
+    # model.load_state_dict(full['model_state_dict'])
     model.to(device)
 
     # load scripted model
@@ -159,7 +156,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
                       specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size,
                       label_mappings=argscont.label_mappings, hybrid_mode=argscont.hybrid_mode,
-                      feat_dim=argscont.input_channels)
+                      feat_dim=argscont.input_channels, splitting_redundancy=argscont.splitting_redundancy)
     pm = PredictionMapper(val_path, out_path, th.splitfile)
 
     if batch_num == -1:
@@ -254,14 +251,55 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
         if os.path.exists(set_path + di + '/argscont.pkl'):
             argscont = ArgsContainer().load_from_pkl(set_path + di + '/argscont.pkl')
         else:
-            if os.path.exists(set_path + di + '/training_args.pkl'):
-                argscont = args2container_14(set_path + di + '/training_args.pkl')
-            else:
-                print("No arguments found for this training. Skipping...")
-                continue
+            print("No arguments found for this training. Skipping...")
+            continue
         if cloud_out_path is not None:
             curr_out_path = cloud_out_path + di + '/worst/'
         else:
             curr_out_path = None
         validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
                    val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
+
+
+def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
+                                  val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None):
+    """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
+        with the format: 'state_dict_e{epoch_number}.pth'.
+
+    Args:
+        training_path: path where the trainings are located.
+        val_path: path to cell files on which the trained models should get validated.
+        out_path: path where validation folder should get saved.
+        model_freq: Every model_freq state_dict at the set_path gets evaluated.
+        val_iter: number of validation iterations.
+        batch_num: Batch size in inference mode can be larger than during training. Default is same as during training.
+        cloud_out_path: Path to save worst inference examples.
+    """
+    training_path = os.path.expanduser(training_path)
+    val_path = os.path.expanduser(val_path)
+    out_path = os.path.expanduser(out_path)
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+    # load argument container
+    if os.path.exists(training_path + '/argscont.pkl'):
+        argscont = ArgsContainer().load_from_pkl(training_path + '/argscont.pkl')
+    else:
+        print("No argument container found for this training.")
+        return
+    # prepare for saving worst examples
+    if cloud_out_path is not None:
+        curr_out_path = cloud_out_path + '/worst/'
+    else:
+        curr_out_path = None
+    # validate different models
+    model_path = training_path + 'models/'
+    if not os.path.exists(model_path):
+        print("Model folder was not found in training. The folder must be named 'models'.")
+        return
+    models = glob.glob(model_path + 'state_dict_*')
+    model_idcs = np.arange(1, len(models), model_freq)
+    for ix in model_idcs:
+        model_type = f'state_dict_e{ix}.pth'
+        validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
+                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
+

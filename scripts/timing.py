@@ -150,11 +150,11 @@ def time_splitting(data_path: str, out_path: str, bio_density: float = None, cap
                 if density_mode:
                     if bio_density is None or tech_density is None or capacity is None:
                         raise ValueError('bio_density, tech_density and capacity must be given in density mode')
-                    bfs = objects.bfs_vertices_diameter(obj, choice[0], vert_num)
+                    bfs = objects.density_splitting(obj, choice[0], vert_num)
                 else:
                     if chunk_size is None:
                         raise ValueError('chunk_size parameter must be given in context mode.')
-                    bfs = objects.bfs_euclid_diameter(obj, choice[0], chunk_size)
+                    bfs = objects.context_splitting(obj, choice[0], chunk_size)
                 chunks.append(bfs)
                 mask[bfs] = False
                 nodes_new = np.arange(len(obj.nodes))[mask]
