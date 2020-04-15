@@ -6,9 +6,11 @@ from morphx.data.basics import load_pkl
 
 class DataContainer(object):
     def __init__(self, density_data: Dict[Any, Tuple[list, list]],
-                 context_data: Dict[Any, Tuple[list, list]], metric: str = 'f1-score'):
+                 context_data: Dict[Any, Tuple[list, list]], time_data: Dict[Any, Tuple[list, list]],
+                 metric: str = 'f1-score'):
         self._density_data = density_data
         self._context_data = context_data
+        self._time_data = time_data
         self._metric = metric
 
     @property
@@ -20,6 +22,10 @@ class DataContainer(object):
         return self._context_data
 
     @property
+    def time_data(self):
+        return self._time_data
+
+    @property
     def metric(self):
         return self._metric
 
@@ -27,6 +33,7 @@ class DataContainer(object):
         try:
             attr_dict = {'density_data': self.density_data,
                          'context_data': self.context_data,
+                         'time_data': self.time_data,
                          'metric': self._metric}
             with open(path, 'wb') as f:
                 pickle.dump(attr_dict, f)
