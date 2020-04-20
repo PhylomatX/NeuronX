@@ -1,7 +1,8 @@
 import os
+import numpy as np
 import pickle
 import torch
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from morphx.data import basics
 from morphx.processing import clouds
 
@@ -35,7 +36,9 @@ class ArgsContainer(object):
                  hybrid_mode: bool = False,
                  optimizer: str = 'adam',
                  scheduler: str = 'steplr',
-                 splitting_redundancy: int = 1):
+                 splitting_redundancy: int = 1,
+                 no_batch: bool = False,
+                 class_weights: Union[str, np.ndarray] = None):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -106,6 +109,8 @@ class ArgsContainer(object):
         self._optimizer = optimizer
         self._scheduler = scheduler
         self._splitting_redundancy = splitting_redundancy
+        self._no_batch = no_batch
+        self._class_weights = class_weights
 
     @property
     def normalization(self):
@@ -230,6 +235,14 @@ class ArgsContainer(object):
         return self._splitting_redundancy
 
     @property
+    def no_batch(self):
+        return self._no_batch
+
+    @property
+    def class_weights(self):
+        return self._class_weights
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -258,7 +271,9 @@ class ArgsContainer(object):
                      'hybrid_mode': self._hybrid_mode,
                      'optimizer': self._optimizer,
                      'scheduler': self._scheduler,
-                     'splitting_redundancy': self._splitting_redundancy}
+                     'splitting_redundancy': self._splitting_redundancy,
+                     'no_batch': self._no_batch,
+                     'class_weights': self._class_weights}
         return attr_dict
 
     def save2pkl(self, path: str):

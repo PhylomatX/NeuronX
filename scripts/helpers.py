@@ -12,7 +12,6 @@ from matplotlib import pyplot as plt
 from morphx.processing import ensembles
 from morphx.data.chunkhandler import ChunkHandler
 from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.reps.super_segmentation_helper import map_myelin2coords
 
 
 def get_areas(set_path: str, out_path: str):
@@ -274,32 +273,6 @@ def eval_gt(data_path: str, out_path: str, name: str):
     plt.xticks(area_type, ['cell', 'mi', 'sj', 'vc'], fontsize=fontsize)
     plt.savefig(out_path + name + '_areas.eps')
     plt.close()
-
-
-def add_myelin(set_path: str, out_path: str):
-    """ loads myelin predictions, maps them to node coordinates, then maps them to vertices and saves all
-        CloudEnsembles at given path with the myelin predicitons included to out_path. """
-    set_path = os.path.expanduser(set_path)
-    out_path = os.path.expanduser(out_path)
-    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    files = glob.glob(set_path + '*.pkl')
-    for file in tqdm(files):
-        sso_id = int(re.findall(r"/sso_(\d+).", file)[0])
-        sso = SuperSegmentationObject(sso_id)
-        sso.load_skeleton()
-        myelinated = map_myelin2coords(sso.skeleton["nodes"], mag=4)
-        ce = ensembles.ensemble_from_pkl(file)
-        hc = ce.hc
-        nodes_idcs = np.arange(len(hc.nodes))
-        myel_nodes = nodes_idcs[myelinated.astype(bool)]
-        myel_vertices = []
-        for node in myel_nodes:
-            myel_vertices.extend(hc.verts2node[node])
-        # myelinated vertices get type 1, not myelinated vertices get type 0
-        types = np.zeros(len(hc.vertices))
-        types[myel_vertices] = 1
-        hc.set_types(types)
-        ce.save2pkl(out_path + f'sso_{sso_id}.pkl')
 
 
 def produce_chunks():

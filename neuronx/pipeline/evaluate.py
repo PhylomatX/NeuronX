@@ -12,58 +12,22 @@ from neuronx.pipeline import infer
 from morphx.classes.cloudensemble import CloudEnsemble
 
 
-# -------------------------------------- PIPELINE METHODS ------------------------------------------- #
+# -------------------------------------- HELPER METHODS ------------------------------------------- #
 
-def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
-                         drop_unpreds: bool = True, data_type: str = 'ce', eval_name: str = 'evaluation',
-                         pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
-                         val_type: str = 'training_set', model_freq: int = 1, target_names: List[str] = None):
-    """ Runs full pipeline on given training set including validation and evaluation.
-
-    Args:
-        val_type: 'training_set' for using the 'validate_training_set' validation method or 'multiple_model' for
-            using the 'validate_multi_model_training' validation method.
-    """
-    if pipe_steps is None:
-        pipe_steps = [True, True]
-    out_path = set_path + f'{eval_name}_valiter{val_iter}_batchsize{batch_num}/'
-    eval_name += f'_{mode}'
-    set_path = os.path.expanduser(set_path)
-    val_path = os.path.expanduser(val_path)
-    out_path = os.path.expanduser(out_path)
-    if save_worst_examples:
-        cloud_out_path = out_path
+def handle_unpreds(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
+    """ Removes labels which equal -1. """
+    if drop:
+        mask = np.logical_and(gt != -1, hc != -1)
+        return gt[mask], hc[mask]
     else:
-        cloud_out_path = None
-    if pipe_steps[0]:
-        # run validations
-        if val_type == 'training_set':
-            infer.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
-                                        batch_num=batch_num, cloud_out_path=cloud_out_path)
-        elif val_type == 'multiple_model':
-            infer.validate_multi_model_training(set_path, val_path, out_path, model_freq, val_iter=val_iter,
-                                                batch_num=batch_num, cloud_out_path=cloud_out_path)
-        else:
-            raise ValueError("val_type not known.")
-    if pipe_steps[1]:
-        # evaluate validations
-        eval_validation_set(out_path, total, mode, filters, drop_unpreds, data_type=data_type, eval_name=eval_name,
-                            targets=target_names)
+        return gt, hc
 
 
-if __name__ == '__main__':
-    # start full pipeline
-    s_path = '~/thesis/current_work/4-class/2020_04_11_10000_28000/'
-    v_path = '~/thesis/gt/20_04_09/evaluation/'
-    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
-    target_names = ['dendrite', 'other', 'neck', 'head']
-    # target_names = ['other', 'axon', 'bouton', 'terminal']
-    full_evaluation_pipe(s_path, v_path, eval_name='eval_f', pipe_steps=[False, True], val_iter=5, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, target_names=target_names)
-
-    # evaluate existing validation again
-    # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
-    # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')
+def get_target_names(gtl: np.ndarray, hcl: np.ndarray, targets: list) -> list:
+    """ Extracts the names of the labels which appear in gtl and hcl. """
+    targets = np.array(targets)
+    total = np.unique(np.concatenate((gtl, hcl), axis=0)).astype(int)
+    return list(targets[total])
 
 
 # -------------------------------------- EVALUATION METHODS ------------------------------------------- #
@@ -259,19 +223,56 @@ def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: lis
     return reports, reports_txt
 
 
-# -------------------------------------- HELPER METHODS ------------------------------------------- #
+# -------------------------------------- PIPELINE METHODS ------------------------------------------- #
 
-def handle_unpreds(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
-    """ Removes labels which equal -1. """
-    if drop:
-        mask = np.logical_and(gt != -1, hc != -1)
-        return gt[mask], hc[mask]
+def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
+                         drop_unpreds: bool = True, data_type: str = 'ce', eval_name: str = 'evaluation',
+                         pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
+                         val_type: str = 'training_set', model_freq: int = 1, target_names: List[str] = None,
+                         re_evaluation: bool = False):
+    """ Runs full pipeline on given training set including validation and evaluation.
+
+    Args:
+        val_type: 'training_set' for using the 'validate_training_set' validation method or 'multiple_model' for
+            using the 'validate_multi_model_training' validation method.
+    """
+    if pipe_steps is None:
+        pipe_steps = [True, True]
+    out_path = set_path + f'{eval_name}_valiter{val_iter}_batchsize{batch_num}/'
+    eval_name += f'_{mode}'
+    set_path = os.path.expanduser(set_path)
+    val_path = os.path.expanduser(val_path)
+    out_path = os.path.expanduser(out_path)
+    if save_worst_examples:
+        cloud_out_path = out_path
     else:
-        return gt, hc
+        cloud_out_path = None
+    if pipe_steps[0]:
+        # run validations
+        if val_type == 'training_set':
+            infer.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
+                                        batch_num=batch_num, cloud_out_path=cloud_out_path)
+        elif val_type == 'multiple_model':
+            infer.validate_multi_model_training(set_path, val_path, out_path, model_freq, val_iter=val_iter,
+                                                batch_num=batch_num, cloud_out_path=cloud_out_path)
+        else:
+            raise ValueError("val_type not known.")
+    if pipe_steps[1]:
+        # evaluate validations
+        eval_validation_set(out_path, total=total, mode=mode, filters=filters, drop_unpreds=drop_unpreds,
+                            data_type=data_type, eval_name=eval_name, targets=target_names, re_evaluation=re_evaluation)
 
 
-def get_target_names(gtl: np.ndarray, hcl: np.ndarray, targets: list) -> list:
-    """ Extracts the names of the labels which appear in gtl and hcl. """
-    targets = np.array(targets)
-    total = np.unique(np.concatenate((gtl, hcl), axis=0)).astype(int)
-    return list(targets[total])
+if __name__ == '__main__':
+    # start full pipeline
+    s_path = '~/thesis/current_work/4-class/run2/2020_04_18_10000_28000_hard/'
+    v_path = '~/thesis/gt/20_04_09/evaluation/'
+    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
+    target_names = ['dendrite', 'other', 'neck', 'head']
+    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal']
+    full_evaluation_pipe(s_path, v_path, eval_name='eval_f', pipe_steps=[True, True], val_iter=5, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=50, target_names=target_names)
+
+    # evaluate existing validation again
+    # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
+    # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')

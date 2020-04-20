@@ -13,7 +13,7 @@ from morphx.processing import clouds
 from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
-from elektronn3.models.convpoint import SegSmall, SegBig
+from elektronn3.models.convpoint import SegSmall, SegBig, SegBigNoBatch
 from neuronx.classes.argscontainer import ArgsContainer
 
 
@@ -131,13 +131,17 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         device = torch.device('cpu')
 
     # load model
-    if argscont.use_big:
+    if argscont.no_batch:
+        model = SegBigNoBatch(argscont.input_channels, argscont.class_num)
+    elif argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
-    full = torch.load(training_path + model_type)
-    model.load_state_dict(full)
-    # model.load_state_dict(full['model_state_dict'])
+    try:
+        full = torch.load(training_path + model_type)
+        model.load_state_dict(full)
+    except RuntimeError:
+        model.load_state_dict(full['model_state_dict'])
     model.to(device)
 
     # load scripted model

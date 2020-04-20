@@ -11,7 +11,7 @@ from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
-from elektronn3.models.convpoint import SegSmall, SegBig
+from elektronn3.models.convpoint import SegSmall, SegBig, SegBigNoBatch
 from elektronn3.training import Trainer3d, Backup
 from neuronx.classes.argscontainer import ArgsContainer
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
@@ -19,7 +19,7 @@ from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 def training_thread(acont: ArgsContainer):
     # define other parameters
-    lr = 1e-3
+    lr = 0.5e-4
     lr_stepsize = 1000
     lr_dec = 0.995
     max_steps = int(acont.max_step_size / acont.batch_size)
@@ -36,7 +36,9 @@ def training_thread(acont: ArgsContainer):
         device = torch.device('cpu')
 
     # load model
-    if acont.use_big:
+    if acont.no_batch:
+        model = SegBigNoBatch(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0)
+    elif acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
@@ -108,7 +110,26 @@ def training_thread(acont: ArgsContainer):
     if scheduler is None:
         raise ValueError(f"Scheduler {acont.scheduler} is not known.")
 
-    criterion = torch.nn.CrossEntropyLoss()
+    # calculate class weights if necessary
+    weights = None
+    if acont.class_weights is not None:
+        if isinstance(acont.class_weights, str):
+            set_info = train_ds.get_set_info()
+            labels = set_info['labels'][0]
+            counts = set_info['labels'][1]
+            if not acont.hybrid_mode:
+                # remove cell organelles
+                idcs = labels.argsort()
+                counts = counts[idcs][:-(len(labels)-acont.class_num)]
+            if acont.class_weights == 'mean':
+                weights = counts.mean() / counts
+            if acont.class_weights == 'sum':
+                weights = counts.sum() / counts
+        elif isinstance(acont.class_weights, np.ndarray):
+            weights = acont.class_weights
+        weights = torch.from_numpy(weights).float()
+    print(f"Weights: {weights}")
+    criterion = torch.nn.CrossEntropyLoss(weight=weights)
     if acont.use_cuda:
         criterion.cuda()
     trainer = Trainer3d(
@@ -131,14 +152,12 @@ def training_thread(acont: ArgsContainer):
         example_input=(example_feats, example_pts),
         enable_save_trace=jit
     )
-
     # Archiving training script, src folder, env info
     Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
     acont.save2pkl(trainer.save_path + '/argscont.pkl')
     with open(trainer.save_path + '/argscont.txt', 'w') as f:
         f.write(str(argscont.attr_dict))
     f.close()
-
     # Start training
     trainer.run(max_steps)
 
@@ -147,30 +166,33 @@ if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
-    bio_density = 50
-    sample_num = 100000
-    chunk_size = 40000
+    bio_density = 80
+    sample_num = 28000
+    chunk_size = 10000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    normalization = chunk_size
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/4-class/',
-                             train_path='/u/jklimesch/thesis/gt/20_04_09/',
+    if density_mode:
+        normalization = 50000
+    else:
+        normalization = chunk_size
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/4-class/run2/',
+                             train_path='/u/jklimesch/thesis/gt/20_04_16/',
                              sample_num=sample_num,
-                             name=name + f'_re',
+                             name=name + f'_mean',
                              class_num=4,
                              train_transforms=[clouds.RandomVariation((-100, 100)),
                                                clouds.RandomShear(limits=(-0.3, 0.3)),
-                                               clouds.RandomRotate(), clouds.Normalization(normalization),
+                                               clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=2,
-                             input_channels=4,
+                             batch_size=8,
+                             input_channels=5,
                              use_val=False,
-                             features={'hc': np.array([1, 0, 0, 0]),
-                                       'mi': np.array([0, 1, 0, 0]),
-                                       'vc': np.array([0, 0, 1, 0]),
-                                       'sy': np.array([0, 0, 0, 1])},
+                             features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
+                                       'mi': np.array([0, 0, 1, 0, 0]),
+                                       'vc': np.array([0, 0, 0, 1, 0]),
+                                       'sy': np.array([0, 0, 0, 0, 1])},
                              chunk_size=chunk_size,
                              tech_density=1500,
                              bio_density=bio_density,
@@ -180,5 +202,12 @@ if __name__ == '__main__':
                              label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)],
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=2)
+                             splitting_redundancy=2,
+                             no_batch=True,
+                             class_weights='mean')
     training_thread(argscont)
+
+    # 4-class spine
+    # label_mappings = [(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)]
+    # 5-class axon
+    # label_mappings=[(5, 0), (6, 0)]

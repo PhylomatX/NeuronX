@@ -221,7 +221,7 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
     ax.grid(True, zorder=0)
     plt.tight_layout()
     plt.ylim(top=1)
-    plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.eps")
+    plt.savefig(output_path + f"{cell_key}_{part_key}_{class_key}_{metric_key}_d{density}_p{points}.png")
 
 
 def generate_diagrams(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
@@ -244,10 +244,9 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
 
 
 if __name__ == '__main__':
-    # summarize_reports('~/thesis/results/param_search_density/full/intermediate6/eval_f_valiter5_batchsize-1/',
-    # 'eval_f_mv')
-
-    o_path = '~/thesis/current_work/4-class/2020_04_11_40000_100000axon/eval_f_valiter5_batchsize-1/'
-    r_path = o_path + 'eval_f_mv.pkl'
+    report_name = 'eval_f_mv'
+    o_path = '~/thesis/current_work/4-class/run2/2020_04_18_80_80000_hard/eval_f_valiter5_batchsize-1/'
+    summarize_reports(o_path, report_name)
+    r_path = o_path + report_name + '.pkl'
     generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
                       filter_identifier=False, neg_identifier=[], time=True)
