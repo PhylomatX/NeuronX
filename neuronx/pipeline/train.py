@@ -19,7 +19,7 @@ from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 def training_thread(acont: ArgsContainer):
     # define other parameters
-    lr = 0.5e-4
+    lr = 1e-3
     lr_stepsize = 1000
     lr_dec = 0.995
     max_steps = int(acont.max_step_size / acont.batch_size)
@@ -37,9 +37,11 @@ def training_thread(acont: ArgsContainer):
 
     # load model
     if acont.no_batch:
-        model = SegBigNoBatch(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0)
+        model = SegBigNoBatch(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
+                              use_bias=acont.use_bias)
     elif acont.use_big:
-        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0)
+        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
+                       use_bias=acont.use_bias, norm_type=acont.norm_type)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -177,16 +179,16 @@ if __name__ == '__main__':
         normalization = 50000
     else:
         normalization = chunk_size
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/4-class/run2/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/4-class/run3/',
                              train_path='/u/jklimesch/thesis/gt/20_04_16/',
                              sample_num=sample_num,
-                             name=name + f'_mean',
+                             name=name + f'_hard_red',
                              class_num=4,
                              train_transforms=[clouds.RandomVariation((-100, 100)),
                                                clouds.RandomShear(limits=(-0.3, 0.3)),
                                                clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=8,
+                             batch_size=4,
                              input_channels=5,
                              use_val=False,
                              features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
@@ -202,9 +204,10 @@ if __name__ == '__main__':
                              label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)],
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=2,
+                             splitting_redundancy=5,
+                             class_weights=np.array([2, 1, 6, 4]),
                              no_batch=True,
-                             class_weights='mean')
+                             use_bias=True)
     training_thread(argscont)
 
     # 4-class spine

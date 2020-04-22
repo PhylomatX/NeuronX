@@ -38,7 +38,9 @@ class ArgsContainer(object):
                  scheduler: str = 'steplr',
                  splitting_redundancy: int = 1,
                  no_batch: bool = False,
-                 class_weights: Union[str, np.ndarray] = None):
+                 class_weights: Union[str, np.ndarray] = None,
+                 use_bias: bool = False,
+                 norm_type: str = 'bn'):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -111,6 +113,8 @@ class ArgsContainer(object):
         self._splitting_redundancy = splitting_redundancy
         self._no_batch = no_batch
         self._class_weights = class_weights
+        self._use_bias = use_bias
+        self._norm_type = norm_type
 
     @property
     def normalization(self):
@@ -243,6 +247,14 @@ class ArgsContainer(object):
         return self._class_weights
 
     @property
+    def use_bias(self):
+        return self._use_bias
+
+    @property
+    def norm_type(self):
+        return self._norm_type
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -273,7 +285,9 @@ class ArgsContainer(object):
                      'scheduler': self._scheduler,
                      'splitting_redundancy': self._splitting_redundancy,
                      'no_batch': self._no_batch,
-                     'class_weights': self._class_weights}
+                     'class_weights': self._class_weights,
+                     'use_bias': self._use_bias,
+                     'norm_type': self._norm_type}
         return attr_dict
 
     def save2pkl(self, path: str):

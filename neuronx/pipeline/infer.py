@@ -132,9 +132,10 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
     # load model
     if argscont.no_batch:
-        model = SegBigNoBatch(argscont.input_channels, argscont.class_num)
+        model = SegBigNoBatch(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias)
     elif argscont.use_big:
-        model = SegBig(argscont.input_channels, argscont.class_num)
+        model = SegBig(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias,
+                       norm_type=argscont.norm_type)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     try:

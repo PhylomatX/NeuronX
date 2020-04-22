@@ -265,7 +265,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/4-class/run2/2020_04_18_10000_28000_hard/'
+    s_path = '~/thesis/current_work/4-class/run3/2020_04_21_10000_28000_hard_bn/'
     v_path = '~/thesis/gt/20_04_09/evaluation/'
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     target_names = ['dendrite', 'other', 'neck', 'head']
