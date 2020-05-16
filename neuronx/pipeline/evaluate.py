@@ -107,7 +107,7 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
         name = file[slashs[-1] + 1:-4]
         report, report_txt = eval_obj(file, total_labels, mode=mode, target_names=targets, filters=filters,
                                       drop_unpreds=drop_unpreds, data_type=data_type,
-                                      label_mapping=argscont.label_mappings)
+                                      label_mapping=argscont.label_mappings, label_remove=argscont.label_remove)
         reports[name] = report
         reports_txt += name + '\n\n' + report_txt + '\n\n\n'
     # Perform evaluation on total label arrays (labels from all files sticked together), prediction
@@ -145,7 +145,7 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
 
 def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: list = None, filters: bool = False,
              drop_unpreds: bool = True, data_type: str = 'obj',
-             label_mapping: List[Tuple[int, int]] = None) -> tuple:
+             label_mapping: List[Tuple[int, int]] = None, label_remove: List[int] = None) -> tuple:
     """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
         ground truth files with different filters or under different conditions. See eval_dataset for argument
         description.
@@ -156,13 +156,15 @@ def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: lis
     reports = {}
     reports_txt = ""
     file = os.path.expanduser(file)
+    # load predictions and corresponding ground truth
     preds = basics.load_pkl(file)
-    # load HybridCloud and corresponding ground truth
     obj = objects.load_obj(data_type, preds[0])
     obj.set_predictions(preds[1])
     reports['pred_num'] = obj.pred_num
+    if label_remove is not None:
+        obj.remove_nodes(label_remove)
     if label_mapping is not None:
-        obj.hc.map_labels(label_mapping)
+        obj.map_labels(label_mapping)
     # Perform majority vote on existing predictions and set these as new labels
     start = time.time()
     if mode == 'd':
@@ -229,7 +231,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
                          drop_unpreds: bool = True, data_type: str = 'ce', eval_name: str = 'evaluation',
                          pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
                          val_type: str = 'training_set', model_freq: int = 1, target_names: List[str] = None,
-                         re_evaluation: bool = False):
+                         re_evaluation: bool = False, specific_model: int = None):
     """ Runs full pipeline on given training set including validation and evaluation.
 
     Args:
@@ -254,7 +256,8 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
                                         batch_num=batch_num, cloud_out_path=cloud_out_path)
         elif val_type == 'multiple_model':
             infer.validate_multi_model_training(set_path, val_path, out_path, model_freq, val_iter=val_iter,
-                                                batch_num=batch_num, cloud_out_path=cloud_out_path)
+                                                batch_num=batch_num, cloud_out_path=cloud_out_path,
+                                                specific_model=specific_model)
         else:
             raise ValueError("val_type not known.")
     if pipe_steps[1]:
@@ -265,13 +268,17 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/4-class/run3/2020_04_21_10000_28000_hard_bn/'
-    v_path = '~/thesis/gt/20_04_09/evaluation/'
+    s_path = '~/thesis/current_work/sp_3/run2/2020_05_15_10000_10000sampled_nn16/'
+    # s_path = '~/thesis/current_work/4-class/run4/2020_04_23_20000_60000_hard/'
+    v_path = '~/thesis/tmp/evaluation/'
+    # v_path = '~/thesis/gt/20_04_16/evaluation/'
+    target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
-    target_names = ['dendrite', 'other', 'neck', 'head']
+    # target_names = ['dendrite', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal']
-    full_evaluation_pipe(s_path, v_path, eval_name='eval_f', pipe_steps=[True, True], val_iter=5, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, target_names=target_names)
+    full_evaluation_pipe(s_path, v_path, eval_name='eval_val_201', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+                         save_worst_examples=True, val_type='multiple_model', model_freq=100, specific_model=201,
+                         target_names=target_names)
 
     # evaluate existing validation again
     # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'

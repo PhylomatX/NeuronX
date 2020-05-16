@@ -34,6 +34,7 @@ def generate_verts2node(input_path: str, output_path: str):
     for file in tqdm(files):
         slashs = [pos for pos, char in enumerate(file) if char == '/']
         name = file[slashs[-1] + 1:-4]
+        print(name)
         ce = ensembles.ensemble_from_pkl(file)
         ce.reset_ensemble()
         ce.hc.set_verts2node(None)
@@ -87,5 +88,5 @@ def poissonize(input_path: str, output_path: str, tech_density: int):
 if __name__ == '__main__':
     # add_myelin('~/thesis/gt/20_04_09/evaluation/', '~/thesis/gt/20_04_16/evaluation/')
     # poissonize('~/thesis/gt/intermediate/', '~/thesis/gt/intermediate/', 1500)
-    # generate_verts2node('~/thesis/gt/intermediate/', '~/thesis/gt/intermediate/')
-    add_myelin('~/thesis/gt/intermediate/', '~/thesis/gt/intermediate/myelin/')
+    generate_verts2node('~/thesis/tmp/poisson/single/', '~/thesis/tmp/poisson/single/')
+    # add_myelin('~/thesis/gt/intermediate/', '~/thesis/gt/intermediate/myelin/')

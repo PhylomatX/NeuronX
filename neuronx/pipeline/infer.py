@@ -67,6 +67,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
 
             # convert all tensors to numpy arrays and
             pts = pts.cpu().detach().numpy()
+            features = features.cpu().detach().numpy()
             l_mask = l_mask.numpy().astype(bool)
             o_mask = o_mask.numpy().astype(bool)
             targets = targets.numpy()
@@ -85,11 +86,16 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                         if loss > t_loss:
                             worst_ix = j
                             t_loss = loss
-                worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
-                target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
-                output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)
-                worst = [target_cloud, output_cloud]
-                basics.save2pkl(worst, out_path, f'{hc}_i{i}_b{batch}_i{worst_ix}')
+                        curr_output = np.argmax(curr_output, axis=1)
+                        target_curr = PointCloud(pts[j], targets[j], features=features[j])
+                        output_curr = PointCloud(pts[j][l_mask[j].astype(bool)], curr_output)
+                        curr = [target_curr, output_curr]
+                        basics.save2pkl(curr, out_path, f'{hc}_i{i}_b{batch}_i{j}')
+                # worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
+                # target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
+                # output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)
+                # worst = [target_cloud, output_cloud]
+                # basics.save2pkl(worst, out_path, f'{hc}_i{i}_b{batch}_i{worst_ix}')
 
             # apply argmax to outputs
             output_np = np.argmax(output_np, axis=2)
@@ -110,6 +116,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                     pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j)
                     map_timing[0] += time.time() - start
                     map_timing[1] += 1
+
     return chunk_timing[0] / chunk_timing[1], model_timing[0] / model_timing[1], map_timing[0] / map_timing[1]
 
 
@@ -131,11 +138,9 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         device = torch.device('cpu')
 
     # load model
-    if argscont.no_batch:
-        model = SegBigNoBatch(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias)
-    elif argscont.use_big:
+    if argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias,
-                       norm_type=argscont.norm_type)
+                       norm_type=argscont.norm_type, neighborhood_size=argscont.neighborhood_size)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     try:
@@ -161,8 +166,9 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
                       specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size,
                       label_mappings=argscont.label_mappings, hybrid_mode=argscont.hybrid_mode,
-                      feat_dim=argscont.input_channels, splitting_redundancy=argscont.splitting_redundancy)
-    pm = PredictionMapper(val_path, out_path, th.splitfile)
+                      feat_dim=argscont.input_channels, splitting_redundancy=argscont.splitting_redundancy,
+                      label_remove=argscont.label_remove, sampling=argscont.sampling)
+    pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=argscont.label_remove)
 
     if batch_num == -1:
         batch_size = argscont.batch_size
@@ -259,7 +265,7 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
             print("No arguments found for this training. Skipping...")
             continue
         if cloud_out_path is not None:
-            curr_out_path = cloud_out_path + di + '/worst/'
+            curr_out_path = cloud_out_path + di + '/examples/'
         else:
             curr_out_path = None
         validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
@@ -267,7 +273,8 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
 
 
 def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
-                                  val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None):
+                                  val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None,
+                                  specific_model: int = None):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -293,7 +300,7 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
         return
     # prepare for saving worst examples
     if cloud_out_path is not None:
-        curr_out_path = cloud_out_path + '/worst/'
+        curr_out_path = cloud_out_path + '/examples/'
     else:
         curr_out_path = None
     # validate different models
@@ -302,9 +309,14 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
         print("Model folder was not found in training. The folder must be named 'models'.")
         return
     models = glob.glob(model_path + 'state_dict_*')
-    model_idcs = np.arange(1, len(models), model_freq)
-    for ix in model_idcs:
-        model_type = f'state_dict_e{ix}.pth'
-        validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
+    if specific_model is None:
+        model_idcs = np.arange(1, len(models), model_freq)
+        for ix in model_idcs:
+            model_type = f'state_dict_e{ix}.pth'
+            validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
+                       val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
+    else:
+        model_type = f'state_dict_e{specific_model}.pth'
+        validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
                    val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
 

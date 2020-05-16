@@ -281,19 +281,41 @@ def produce_chunks():
                 'mi': np.array([0, 1, 0, 0]),
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
-    train_transforms = [clouds.RandomVariation((-100, 100)), clouds.RandomShear(limits=(-0.3, 0.3)),
-                        clouds.RandomRotate(), clouds.Normalization(40000), clouds.Center()]
-    train_transforms = clouds.Compose(train_transforms)
-    path = os.path.expanduser('~/thesis/gt/20_04_09/new/')
-    ch = ChunkHandler(path, sample_num=100000, density_mode=False, specific=True,
-                      chunk_size=40000, obj_feats=features,
-                      transform=train_transforms)
+    chunk_size = 10000
+    # train_transforms = [clouds.RandomVariation((-100, 100)), clouds.RandomShear(limits=(-0.3, 0.3)),
+    #                     clouds.RandomRotate(), clouds.Normalization(chunk_size), clouds.Center()]
+    train_transforms = clouds.Compose([clouds.Identity()])
+    path = os.path.expanduser('~/thesis/tmp/poisson/')
+    save_path = f'{path}examples/'
+    ch = ChunkHandler(path, sample_num=10000, density_mode=False, tech_density=100, bio_density=100, specific=True,
+                      chunk_size=chunk_size, obj_feats=features, transform=train_transforms, splitting_redundancy=2,
+                      label_mappings=[(5, 1), (6, 2)], label_remove=[1, 2, 3, 4], sampling=False)
+    vert_nums = []
     for item in ch.obj_names:
+        total = None
         for i in range(ch.get_obj_length(item)):
-            sample, idcs = ch[(item, i)]
-            with open(f'{path}test/{item}_{i}.pkl', 'wb') as f:
+            sample, idcs, vert_num = ch[(item, i)]
+            vert_nums.append(vert_num)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+                os.makedirs(f'{save_path}vertnums/')
+            with open(f'{save_path}{item}_{i}.pkl', 'wb') as f:
                 pickle.dump([sample, sample], f)
             f.close()
+            if total is None:
+                total = sample
+            else:
+                total = clouds.merge_clouds([total, sample])
+        with open(f'{save_path}{item}_total.pkl', 'wb') as f:
+            pickle.dump(total, f)
+        f.close()
+    vert_nums = np.array(vert_nums)
+    print(f"Min: {vert_nums.min()}")
+    print(f"Max: {vert_nums.max()}")
+    print(f"Mean: {vert_nums.mean()}")
+    with open(f'{save_path}vertnums/{chunk_size}_vertnums.pkl', 'wb') as f:
+        pickle.dump(vert_nums, f)
+    f.close()
 
 
 def compare_chunks():

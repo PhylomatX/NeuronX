@@ -37,10 +37,14 @@ class ArgsContainer(object):
                  optimizer: str = 'adam',
                  scheduler: str = 'steplr',
                  splitting_redundancy: int = 1,
-                 no_batch: bool = False,
+                 use_norm: bool = True,
                  class_weights: Union[str, np.ndarray] = None,
                  use_bias: bool = False,
-                 norm_type: str = 'bn'):
+                 norm_type: str = 'bn',
+                 label_remove: List[int] = None,
+                 sampling: bool = True,
+                 batch_avg: int = None,
+                 neighborhood_size: int = 16):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -111,10 +115,14 @@ class ArgsContainer(object):
         self._optimizer = optimizer
         self._scheduler = scheduler
         self._splitting_redundancy = splitting_redundancy
-        self._no_batch = no_batch
+        self._use_norm = use_norm
         self._class_weights = class_weights
         self._use_bias = use_bias
         self._norm_type = norm_type
+        self._label_remove = label_remove
+        self._sampling = sampling
+        self._batch_avg = batch_avg
+        self._neighborhood_size = neighborhood_size
 
     @property
     def normalization(self):
@@ -239,8 +247,8 @@ class ArgsContainer(object):
         return self._splitting_redundancy
 
     @property
-    def no_batch(self):
-        return self._no_batch
+    def use_norm(self):
+        return self._use_norm
 
     @property
     def class_weights(self):
@@ -253,6 +261,22 @@ class ArgsContainer(object):
     @property
     def norm_type(self):
         return self._norm_type
+
+    @property
+    def label_remove(self):
+        return self._label_remove
+
+    @property
+    def sampling(self):
+        return self._sampling
+
+    @property
+    def batch_avg(self):
+        return self._batch_avg
+
+    @property
+    def neighborhood_size(self):
+        return self._neighborhood_size
 
     @property
     def attr_dict(self):
@@ -284,10 +308,14 @@ class ArgsContainer(object):
                      'optimizer': self._optimizer,
                      'scheduler': self._scheduler,
                      'splitting_redundancy': self._splitting_redundancy,
-                     'no_batch': self._no_batch,
+                     'use_norm': self._use_norm,
                      'class_weights': self._class_weights,
                      'use_bias': self._use_bias,
-                     'norm_type': self._norm_type}
+                     'norm_type': self._norm_type,
+                     'label_remove': self._label_remove,
+                     'sampling': self._sampling,
+                     'batch_avg': self._batch_avg,
+                     'neighborhood_size': self._neighborhood_size}
         return attr_dict
 
     def save2pkl(self, path: str):

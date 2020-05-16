@@ -36,12 +36,10 @@ def training_thread(acont: ArgsContainer):
         device = torch.device('cpu')
 
     # load model
-    if acont.no_batch:
-        model = SegBigNoBatch(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
-                              use_bias=acont.use_bias)
-    elif acont.use_big:
+    if acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
-                       use_bias=acont.use_bias, norm_type=acont.norm_type)
+                       use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
+                       neighborhood_size=acont.neighborhood_size)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -72,7 +70,9 @@ def training_thread(acont: ArgsContainer):
                             obj_feats=acont.features,
                             label_mappings=acont.label_mappings,
                             hybrid_mode=acont.hybrid_mode,
-                            splitting_redundancy=acont.splitting_redundancy)
+                            splitting_redundancy=acont.splitting_redundancy,
+                            label_remove=acont.label_remove,
+                            sampling=acont.sampling)
     if acont.use_val:
         val_transforms = clouds.Compose(acont.val_transforms)
         val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
@@ -84,7 +84,9 @@ def training_thread(acont: ArgsContainer):
                               obj_feats=acont.features,
                               label_mappings=acont.label_mappings,
                               hybrid_mode=acont.hybrid_mode,
-                              splitting_redundancy=acont.splitting_redundancy)
+                              splitting_redundancy=acont.splitting_redundancy,
+                              label_remove=acont.label_remove,
+                              sampling=acont.sampling)
 
         # trainer3D was updated to new validation, so prediction mapping is not necessary any more.
         pm = None
@@ -134,6 +136,7 @@ def training_thread(acont: ArgsContainer):
     criterion = torch.nn.CrossEntropyLoss(weight=weights)
     if acont.use_cuda:
         criterion.cuda()
+
     trainer = Trainer3d(
         model=model,
         criterion=criterion,
@@ -152,7 +155,9 @@ def training_thread(acont: ArgsContainer):
         num_classes=acont.class_num,
         schedulers={"lr": scheduler},
         example_input=(example_feats, example_pts),
-        enable_save_trace=jit
+        enable_save_trace=jit,
+        collate_fn=None,
+        batch_avg=acont.batch_avg
     )
     # Archiving training script, src folder, env info
     Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
@@ -165,11 +170,61 @@ def training_thread(acont: ArgsContainer):
 
 
 if __name__ == '__main__':
+    # # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
+    # today = date.today().strftime("%Y_%m_%d")
+    # density_mode = False
+    # bio_density = 80
+    # sample_num = 2000
+    # chunk_size = 3200
+    # if density_mode:
+    #     name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
+    # else:
+    #     name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
+    # if density_mode:
+    #     normalization = 50000
+    # else:
+    #     normalization = chunk_size
+    #
+    # features = {'hc': np.array([1, 0, 0, 0]),
+    #             'mi': np.array([0, 1, 0, 0]),
+    #             'vc': np.array([0, 0, 1, 0]),
+    #             'sy': np.array([0, 0, 0, 1])}
+    #
+    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/3-class/cmn_gt/',
+    #                          train_path='/u/jklimesch/thesis/gt/cmn/train/poisson/',
+    #                          sample_num=sample_num,
+    #                          name=name + f'',
+    #                          class_num=3,
+    #                          train_transforms=[clouds.RandomVariation((-100, 100)),
+    #                                            clouds.RandomShear(limits=(-0.2, 0.2)),
+    #                                            clouds.RandomRotate(apply_flip=True),
+    #                                            clouds.Normalization(normalization),
+    #                                            clouds.Center()],
+    #                          batch_size=32,
+    #                          input_channels=len(features['sy']),
+    #                          use_val=False,
+    #                          features=features,
+    #                          chunk_size=chunk_size,
+    #                          tech_density=300,
+    #                          bio_density=bio_density,
+    #                          density_mode=density_mode,
+    #                          max_step_size=10000000,
+    #                          hybrid_mode=False,
+    #                          scheduler='steplr',
+    #                          optimizer='adam',
+    #                          splitting_redundancy=3,
+    #                          class_weights=np.array([2, 1, 1]),
+    #                          use_bias=False,
+    #                          norm_type='gn')
+    # training_thread(argscont)
+
+    ################################################################################################################
+
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
-    bio_density = 80
-    sample_num = 28000
+    bio_density = 50
+    sample_num = 10000
     chunk_size = 10000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
@@ -179,38 +234,48 @@ if __name__ == '__main__':
         normalization = 50000
     else:
         normalization = chunk_size
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/4-class/run3/',
-                             train_path='/u/jklimesch/thesis/gt/20_04_16/',
+
+    features = {'hc': np.array([1, 0, 0, 0]),
+                'mi': np.array([0, 1, 0, 0]),
+                'vc': np.array([0, 0, 1, 0]),
+                'sy': np.array([0, 0, 0, 1])}
+
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/sp_3/run2/',
+                             train_path='/u/jklimesch/thesis/tmp/poisson/',
                              sample_num=sample_num,
-                             name=name + f'_hard_red',
-                             class_num=4,
+                             name=name + f'sampled_nn32',
+                             class_num=3,
                              train_transforms=[clouds.RandomVariation((-100, 100)),
                                                clouds.RandomShear(limits=(-0.3, 0.3)),
                                                clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=4,
-                             input_channels=5,
+                             batch_size=1,
+                             input_channels=len(features['sy']),
                              use_val=False,
-                             features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
-                                       'mi': np.array([0, 0, 1, 0, 0]),
-                                       'vc': np.array([0, 0, 0, 1, 0]),
-                                       'sy': np.array([0, 0, 0, 0, 1])},
+                             features=features,
                              chunk_size=chunk_size,
                              tech_density=1500,
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
                              hybrid_mode=False,
-                             label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)],
+                             label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 2)],
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=5,
-                             class_weights=np.array([2, 1, 6, 4]),
-                             no_batch=True,
-                             use_bias=True)
+                             splitting_redundancy=2,
+                             use_bias=False,
+                             norm_type='gn',
+                             label_remove=[1, 2, 3, 4],
+                             sampling=True,
+                             neighborhood_size=32)
     training_thread(argscont)
 
     # 4-class spine
     # label_mappings = [(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)]
     # 5-class axon
     # label_mappings=[(5, 0), (6, 0)]
+
+    # features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
+    #           'mi': np.array([0, 0, 1, 0, 0]),
+    #           'vc': np.array([0, 0, 0, 1, 0]),
+    #           'sy': np.array([0, 0, 0, 0, 1])}
