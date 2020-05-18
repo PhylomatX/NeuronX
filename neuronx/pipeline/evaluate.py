@@ -268,7 +268,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/sp_3/run2/2020_05_15_10000_10000sampled_nn16/'
+    s_path = '~/thesis/current_work/sp_3/run2/2020_05_15_10000_28000/'
     # s_path = '~/thesis/current_work/4-class/run4/2020_04_23_20000_60000_hard/'
     v_path = '~/thesis/tmp/evaluation/'
     # v_path = '~/thesis/gt/20_04_16/evaluation/'
@@ -276,8 +276,8 @@ if __name__ == '__main__':
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     # target_names = ['dendrite', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal']
-    full_evaluation_pipe(s_path, v_path, eval_name='eval_val_201', pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                         save_worst_examples=True, val_type='multiple_model', model_freq=100, specific_model=201,
+    full_evaluation_pipe(s_path, v_path, eval_name='eval_val_101', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+                         save_worst_examples=True, val_type='multiple_model', model_freq=100, specific_model=101,
                          target_names=target_names)
 
     # evaluate existing validation again

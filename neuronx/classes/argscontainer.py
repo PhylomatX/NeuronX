@@ -44,7 +44,9 @@ class ArgsContainer(object):
                  label_remove: List[int] = None,
                  sampling: bool = True,
                  batch_avg: int = None,
-                 neighborhood_size: int = 16):
+                 kernel_size: int = 16,
+                 neighbor_nums: List[int] = None,
+                 dilations: List[int] = None):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -122,7 +124,9 @@ class ArgsContainer(object):
         self._label_remove = label_remove
         self._sampling = sampling
         self._batch_avg = batch_avg
-        self._neighborhood_size = neighborhood_size
+        self._kernel_size = kernel_size
+        self._neighbor_nums = neighbor_nums
+        self._dilations = dilations
 
     @property
     def normalization(self):
@@ -275,8 +279,16 @@ class ArgsContainer(object):
         return self._batch_avg
 
     @property
-    def neighborhood_size(self):
-        return self._neighborhood_size
+    def kernel_size(self):
+        return self._kernel_size
+
+    @property
+    def neighbor_nums(self):
+        return self._neighbor_nums
+
+    @property
+    def dilations(self):
+        return self._dilations
 
     @property
     def attr_dict(self):
@@ -315,7 +327,9 @@ class ArgsContainer(object):
                      'label_remove': self._label_remove,
                      'sampling': self._sampling,
                      'batch_avg': self._batch_avg,
-                     'neighborhood_size': self._neighborhood_size}
+                     'kernel_size': self._kernel_size,
+                     'neighbor_nums': self._neighbor_nums,
+                     'dilations': self.dilations}
         return attr_dict
 
     def save2pkl(self, path: str):

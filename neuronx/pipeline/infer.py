@@ -13,14 +13,14 @@ from morphx.processing import clouds
 from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
-from elektronn3.models.convpoint import SegSmall, SegBig, SegBigNoBatch
+from elektronn3.models.convpoint import SegSmall, SegBig
 from neuronx.classes.argscontainer import ArgsContainer
 
 
 @torch.no_grad()
 def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
                     device: torch.device, model, pm: PredictionMapper, input_channels: int,
-                    out_path: str = None):
+                    out_path: str = None, sampling: bool = True):
     """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
     chunk_timing = [0, 0]
     model_timing = [0, 0]
@@ -30,6 +30,12 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
 
     for i in range(iter_num):
         for batch in tqdm(range(batch_num)):
+            if not sampling:
+                start = time.time()
+                sample = th[(hc, batch * batch_size)]
+                chunk_timing[0] += time.time() - start
+                chunk_timing[1] += 1
+                point_num = len(sample['pts'])
             pts = torch.zeros((batch_size, point_num, 3))
             features = torch.ones((batch_size, point_num, input_channels))
             mapping_idcs = torch.ones((batch_size, point_num))
@@ -39,17 +45,19 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
             fill_up = 0
             remove = []
             for j in range(batch_size):
-                start = time.time()
-                sample = th[(hc, batch * batch_size + j)]
-                chunk_timing[0] += time.time() - start
-                chunk_timing[1] += 1
-                # fill up empty batches (happening when all parts of current cell have been processed).
-                # The fill up samples are always build by the first parts of the current cell (thus fill_up = 0)
-                # and will be removed later
-                if torch.all(sample['pts'] == 0):
-                    sample = th[(hc, fill_up)]
-                    fill_up += 1
-                    remove.append(j)
+                # for sampling == False, the batch_size is always 1 as the samples have different sizes.
+                if sampling:
+                    start = time.time()
+                    sample = th[(hc, batch * batch_size + j)]
+                    chunk_timing[0] += time.time() - start
+                    chunk_timing[1] += 1
+                    # fill up empty batches (happening when all parts of current cell have been processed).
+                    # The fill up samples are always build by the first parts of the current cell (thus fill_up = 0)
+                    # and will be removed later
+                    if torch.all(sample['pts'] == 0):
+                        sample = th[(hc, fill_up)]
+                        fill_up += 1
+                        remove.append(j)
                 pts[j] = sample['pts']
                 features[j] = sample['features']
                 mapping_idcs[j] = sample['map']
@@ -113,7 +121,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                     curr_map = curr_map[curr_mask]
                     # map predictions to original cloud
                     prediction = PointCloud(curr_pts, curr_out)
-                    pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j)
+                    pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j, sampling=sampling)
                     map_timing[0] += time.time() - start
                     map_timing[1] += 1
 
@@ -140,7 +148,8 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     # load model
     if argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias,
-                       norm_type=argscont.norm_type, neighborhood_size=argscont.neighborhood_size)
+                       norm_type=argscont.norm_type, kernel_size=argscont.kernel_size,
+                       neighbor_nums=argscont.neighbor_nums)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     try:
@@ -189,7 +198,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         start = time.time()
         chunk_timing, model_timing, map_timing = \
             validate_single(th, obj, batch_size, argscont.sample_num, val_iter, device, model, pm,
-                            argscont.input_channels, out_path=cloud_out_path)
+                            argscont.input_channels, out_path=cloud_out_path, sampling=argscont.sampling)
         total_timing = time.time() - start
         attr_dict['timing'] = total_timing
         attr_dicts[obj] = attr_dict

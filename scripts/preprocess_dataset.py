@@ -8,7 +8,7 @@ if __name__ == '__main__':
     # voxel_down_dataset(f'/u/jklimesch/thesis/gt/cmn/{gt_type}/raw/',
     #                    f'/u/jklimesch/thesis/gt/cmn/{gt_type}/voxeled/', 100, 150)
 
-    poissonize_dataset(f'/u/jklimesch/thesis/tmp/evaluation/',
-                       f'/u/jklimesch/thesis/tmp/evaluation/', 100, 0.8)
+    poissonize_dataset(f'/u/jklimesch/thesis/tmp/preprocessing/batch5/',
+                       f'/u/jklimesch/thesis/tmp/preprocessing/', 100, 0.8)
 
 

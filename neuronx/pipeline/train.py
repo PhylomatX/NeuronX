@@ -39,7 +39,7 @@ def training_thread(acont: ArgsContainer):
     if acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
-                       neighborhood_size=acont.neighborhood_size)
+                       kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -222,10 +222,10 @@ if __name__ == '__main__':
 
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
-    density_mode = False
-    bio_density = 50
-    sample_num = 10000
-    chunk_size = 10000
+    density_mode = True
+    bio_density = 100
+    sample_num = 15000
+    chunk_size = 5000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -240,21 +240,21 @@ if __name__ == '__main__':
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/sp_3/run2/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/sp_3/run3/',
                              train_path='/u/jklimesch/thesis/tmp/poisson/',
                              sample_num=sample_num,
-                             name=name + f'sampled_nn32',
+                             name=name + f'_dfull',
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-100, 100)),
                                                clouds.RandomShear(limits=(-0.3, 0.3)),
                                                clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=1,
+                             batch_size=4,
                              input_channels=len(features['sy']),
                              use_val=False,
                              features=features,
                              chunk_size=chunk_size,
-                             tech_density=1500,
+                             tech_density=100,
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
@@ -264,10 +264,12 @@ if __name__ == '__main__':
                              optimizer='adam',
                              splitting_redundancy=2,
                              use_bias=False,
-                             norm_type='gn',
+                             norm_type='bn',
                              label_remove=[1, 2, 3, 4],
                              sampling=True,
-                             neighborhood_size=32)
+                             kernel_size=16,
+                             neighbor_nums=None,
+                             dilations=None)
     training_thread(argscont)
 
     # 4-class spine
