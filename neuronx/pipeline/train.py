@@ -11,7 +11,7 @@ from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
-from elektronn3.models.convpoint import SegSmall, SegBig, SegBigNoBatch
+from elektronn3.models.convpoint import SegSmall, SegBig
 from elektronn3.training import Trainer3d, Backup
 from neuronx.classes.argscontainer import ArgsContainer
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
@@ -39,7 +39,8 @@ def training_thread(acont: ArgsContainer):
     if acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
-                       kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations)
+                       kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations,
+                       reductions=acont.reductions, first_layer=acont.first_layer)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -170,68 +171,18 @@ def training_thread(acont: ArgsContainer):
 
 
 if __name__ == '__main__':
-    # # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-    # today = date.today().strftime("%Y_%m_%d")
-    # density_mode = False
-    # bio_density = 80
-    # sample_num = 2000
-    # chunk_size = 3200
-    # if density_mode:
-    #     name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
-    # else:
-    #     name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-    # if density_mode:
-    #     normalization = 50000
-    # else:
-    #     normalization = chunk_size
-    #
-    # features = {'hc': np.array([1, 0, 0, 0]),
-    #             'mi': np.array([0, 1, 0, 0]),
-    #             'vc': np.array([0, 0, 1, 0]),
-    #             'sy': np.array([0, 0, 0, 1])}
-    #
-    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/3-class/cmn_gt/',
-    #                          train_path='/u/jklimesch/thesis/gt/cmn/train/poisson/',
-    #                          sample_num=sample_num,
-    #                          name=name + f'',
-    #                          class_num=3,
-    #                          train_transforms=[clouds.RandomVariation((-100, 100)),
-    #                                            clouds.RandomShear(limits=(-0.2, 0.2)),
-    #                                            clouds.RandomRotate(apply_flip=True),
-    #                                            clouds.Normalization(normalization),
-    #                                            clouds.Center()],
-    #                          batch_size=32,
-    #                          input_channels=len(features['sy']),
-    #                          use_val=False,
-    #                          features=features,
-    #                          chunk_size=chunk_size,
-    #                          tech_density=300,
-    #                          bio_density=bio_density,
-    #                          density_mode=density_mode,
-    #                          max_step_size=10000000,
-    #                          hybrid_mode=False,
-    #                          scheduler='steplr',
-    #                          optimizer='adam',
-    #                          splitting_redundancy=3,
-    #                          class_weights=np.array([2, 1, 1]),
-    #                          use_bias=False,
-    #                          norm_type='gn')
-    # training_thread(argscont)
-
-    ################################################################################################################
-
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
     density_mode = True
     bio_density = 100
-    sample_num = 15000
-    chunk_size = 5000
+    sample_num = 4000
+    chunk_size = 2500
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
         name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
     if density_mode:
-        normalization = 50000
+        normalization = 5000
     else:
         normalization = chunk_size
 
@@ -240,16 +191,16 @@ if __name__ == '__main__':
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/sp_3/run3/',
-                             train_path='/u/jklimesch/thesis/tmp/poisson/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/sp_3/run6/',
+                             train_path='/u/jklimesch/thesis/gt/sp_gt/voxeled_50/',
                              sample_num=sample_num,
-                             name=name + f'_dfull',
+                             name=name + f'',
                              class_num=3,
-                             train_transforms=[clouds.RandomVariation((-100, 100)),
-                                               clouds.RandomShear(limits=(-0.3, 0.3)),
+                             train_transforms=[clouds.RandomVariation((-50, 50)),
+                                               clouds.RandomShear(limits=(-0.1, 0.1)),
                                                clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=4,
+                             batch_size=8,
                              input_channels=len(features['sy']),
                              use_val=False,
                              features=features,
@@ -262,14 +213,16 @@ if __name__ == '__main__':
                              label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 2)],
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=2,
+                             splitting_redundancy=5,
                              use_bias=False,
-                             norm_type='bn',
+                             norm_type='gn',
                              label_remove=[1, 2, 3, 4],
                              sampling=True,
                              kernel_size=16,
-                             neighbor_nums=None,
-                             dilations=None)
+                             neighbor_nums=[64, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 32, 32],
+                             dilations=None,
+                             reductions=None,
+                             first_layer=True)
     training_thread(argscont)
 
     # 4-class spine

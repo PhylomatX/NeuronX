@@ -281,16 +281,17 @@ def produce_chunks():
                 'mi': np.array([0, 1, 0, 0]),
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
-    chunk_size = 10000
+    chunk_size = 2500
     # train_transforms = [clouds.RandomVariation((-100, 100)), clouds.RandomShear(limits=(-0.3, 0.3)),
     #                     clouds.RandomRotate(), clouds.Normalization(chunk_size), clouds.Center()]
     train_transforms = clouds.Compose([clouds.Identity()])
-    path = os.path.expanduser('~/thesis/tmp/poisson/')
+    path = os.path.expanduser('~/thesis/gt/sp_gt/voxeled_50/')
     save_path = f'{path}examples/'
-    ch = ChunkHandler(path, sample_num=10000, density_mode=False, tech_density=100, bio_density=100, specific=True,
-                      chunk_size=chunk_size, obj_feats=features, transform=train_transforms, splitting_redundancy=2,
-                      label_mappings=[(5, 1), (6, 2)], label_remove=[1, 2, 3, 4], sampling=False)
+    ch = ChunkHandler(path, sample_num=2500, density_mode=False, tech_density=100, bio_density=100, specific=True,
+                      chunk_size=chunk_size, obj_feats=features, transform=train_transforms, splitting_redundancy=5,
+                      label_mappings=[(5, 1), (6, 2)], label_remove=[1, 2, 3, 4], sampling=True)
     vert_nums = []
+    counter = 0
     for item in ch.obj_names:
         total = None
         for i in range(ch.get_obj_length(item)):
@@ -299,6 +300,9 @@ def produce_chunks():
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
                 os.makedirs(f'{save_path}vertnums/')
+            if vert_num < ch.sample_num:
+                print(f'{item}_{i}_{vert_num}')
+                counter += 1
             with open(f'{save_path}{item}_{i}.pkl', 'wb') as f:
                 pickle.dump([sample, sample], f)
             f.close()
@@ -313,6 +317,7 @@ def produce_chunks():
     print(f"Min: {vert_nums.min()}")
     print(f"Max: {vert_nums.max()}")
     print(f"Mean: {vert_nums.mean()}")
+    print(f"Counter: {counter}")
     with open(f'{save_path}vertnums/{chunk_size}_vertnums.pkl', 'wb') as f:
         pickle.dump(vert_nums, f)
     f.close()
@@ -341,5 +346,64 @@ def compare_chunks():
         f.close()
 
 
+def analyse_variance(path: str, epoch: str, labels: list = None):
+    """ Returns the standard deviation of the score given by the sequence of labels of all the experiments in path.
+        Each experiment must therefore have an evaluation file according to the NeuronX standard.
+
+    Args:
+        path: path to the experiments.
+        labels: sequence of keys with which the score can be extracted from the evaluation file.
+
+    Returns:
+        The standard deviation of the experiments.
+    """
+    if labels is None:
+        labels = ['mv', 'weighted avg', 'f1-score']
+    result = {}
+    path = os.path.expanduser(path)
+    dirs = os.listdir(path)
+    for di in dirs:
+        if not os.path.isdir(path + di):
+            continue
+        file = glob.glob(path + di + '/*.pkl')[0]
+        f = open(file, 'rb')
+        info = pickle.load(f)[epoch]
+        for key in info.keys():
+            if 'pred' in key or key == 'total':
+                single = info[key]
+                for label in labels:
+                    single = single[label]
+                if key in result.keys():
+                    result[key].append(single)
+                else:
+                    result[key] = [single]
+    std = {}
+    for key in result:
+        result[key] = np.array(result[key])
+        std[key] = result[key].std()
+    return std, result
+
+
+def variance_report(in_path: str, out_path: str, epoch: int):
+    out_path = os.path.expanduser(out_path)
+    report = ''
+    for cell in analyse_variance(in_path, f'epoch_{epoch}')[0]:
+        report += cell + '\n\n'
+        for key in ['mv', 'mv_skel']:
+            report += key + '\n\n'
+            report += f"\n{f'score':<20}{'std':<20}{'rel (%)':<20}{'mean'}"
+            for subkey in ['dendrite', 'neck', 'head', 'macro avg', 'weighted avg']:
+                stds, result = analyse_variance(in_path, f'epoch_{epoch}', [key, subkey, 'f1-score'])
+                report += f"\n{f'{subkey}:':<20}{round(stds[cell], 4):<20}{round(stds[cell]/np.mean(result[cell])*100, 2):<20}{np.round(np.mean(result[cell]), 4)}"
+            stds, result = analyse_variance(in_path, f'epoch_{epoch}', [key, 'accuracy'])
+            report += f"\n{'accuracy:':<20}{round(stds[cell], 4):<20}{round(stds[cell]/np.mean(result[cell])*100, 2):<20}{np.round(np.mean(result[cell]), 4)}"
+            report += '\n\n\n'
+        report += '\n\n'
+    with open(out_path, 'w') as f:
+        f.write(report)
+
+
 if __name__ == '__main__':
-    produce_chunks()
+    path = '~/thesis/current_work/sp_3/variance_analysis/2020_05_26_100_2000/red5/'
+    # analyse_variance(path, 'epoch_101', ['mv', 'head', 'f1-score'])
+    variance_report(path, path + 'std_report.txt', 221)

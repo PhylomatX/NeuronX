@@ -46,7 +46,9 @@ class ArgsContainer(object):
                  batch_avg: int = None,
                  kernel_size: int = 16,
                  neighbor_nums: List[int] = None,
-                 dilations: List[int] = None):
+                 dilations: List[int] = None,
+                 reductions: List[int] = None,
+                 first_layer: bool = True):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -127,6 +129,8 @@ class ArgsContainer(object):
         self._kernel_size = kernel_size
         self._neighbor_nums = neighbor_nums
         self._dilations = dilations
+        self._reductions = reductions
+        self._first_layer = first_layer
 
     @property
     def normalization(self):
@@ -291,6 +295,14 @@ class ArgsContainer(object):
         return self._dilations
 
     @property
+    def reductions(self):
+        return self._reductions
+
+    @property
+    def first_layer(self):
+        return self._first_layer
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -329,7 +341,9 @@ class ArgsContainer(object):
                      'batch_avg': self._batch_avg,
                      'kernel_size': self._kernel_size,
                      'neighbor_nums': self._neighbor_nums,
-                     'dilations': self.dilations}
+                     'dilations': self._dilations,
+                     'reductions': self._reductions,
+                     'first_layer': self._first_layer}
         return attr_dict
 
     def save2pkl(self, path: str):

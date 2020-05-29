@@ -130,15 +130,16 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
 
 def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_path: str,
                model_type: str = 'state_dict.pth', val_iter: int = 1, batch_num: int = -1,
-               cloud_out_path: str = None):
+               cloud_out_path: str = None, redundancy: int = -1, force_split: bool = False, same_seeds: bool = False):
     training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
 
-    # set random seeds to ensure compareability of different trainings
-    torch.manual_seed(argscont.random_seed)
-    np.random.seed(argscont.random_seed)
-    random.seed(argscont.random_seed)
+    if same_seeds:
+        # set random seeds to ensure compareability
+        torch.manual_seed(argscont.random_seed)
+        np.random.seed(argscont.random_seed)
+        random.seed(argscont.random_seed)
 
     if argscont.use_cuda:
         device = torch.device('cuda')
@@ -149,7 +150,8 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     if argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias,
                        norm_type=argscont.norm_type, kernel_size=argscont.kernel_size,
-                       neighbor_nums=argscont.neighbor_nums)
+                       neighbor_nums=argscont.neighbor_nums, dilations=argscont.dilations,
+                       reductions=argscont.reductions, first_layer=argscont.first_layer)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     try:
@@ -171,12 +173,17 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     model_times = []
     total_times = []
     transforms = clouds.Compose(argscont.val_transforms)
+
+    if redundancy == -1:
+        redundancy = argscont.splitting_redundancy
+
     th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
                       specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size,
                       label_mappings=argscont.label_mappings, hybrid_mode=argscont.hybrid_mode,
-                      feat_dim=argscont.input_channels, splitting_redundancy=argscont.splitting_redundancy,
-                      label_remove=argscont.label_remove, sampling=argscont.sampling)
+                      feat_dim=argscont.input_channels, splitting_redundancy=redundancy,
+                      label_remove=argscont.label_remove, sampling=argscont.sampling,
+                      force_split=force_split)
     pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=argscont.label_remove)
 
     if batch_num == -1:
@@ -246,7 +253,8 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
 
 def validate_training_set(set_path: str, val_path: str, out_path: str, model_type: str = 'state_dict.pth',
-                          val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None):
+                          val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None, redundancy: int = -1,
+                          force_split: bool = False):
     """ Validate multiple trainings.
 
     Args:
@@ -278,12 +286,13 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
         else:
             curr_out_path = None
         validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
-                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
+                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
+                   force_split=force_split)
 
 
 def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
                                   val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None,
-                                  specific_model: int = None):
+                                  specific_model: int = None, redundancy: int = -1, force_split: bool = False):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -323,9 +332,11 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
         for ix in model_idcs:
             model_type = f'state_dict_e{ix}.pth'
             validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
-                       val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
+                       val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
+                       force_split=force_split)
     else:
         model_type = f'state_dict_e{specific_model}.pth'
         validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
-                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path)
+                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
+                   force_split=force_split)
 
