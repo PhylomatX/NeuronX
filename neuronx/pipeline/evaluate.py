@@ -6,7 +6,7 @@ import sklearn.metrics as sm
 from tqdm import tqdm
 from morphx.processing import objects
 from morphx.data import basics
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.pipeline import infer
 from morphx.classes.cloudensemble import CloudEnsemble
@@ -28,6 +28,19 @@ def get_target_names(gtl: np.ndarray, hcl: np.ndarray, targets: list) -> list:
     targets = np.array(targets)
     total = np.unique(np.concatenate((gtl, hcl), axis=0)).astype(int)
     return list(targets[total])
+
+
+def write_confusion_matrix(cm: np.array, names: list) -> str:
+    txt = f"{'':<15}"
+    for name in names:
+        txt += f"{name:<15}"
+    txt += '\n'
+    for ix, name in enumerate(names):
+        txt += f"{name:<15}"
+        for num in cm[ix]:
+            txt += f"{num:<15}"
+        txt += '\n'
+    return txt
 
 
 # -------------------------------------- EVALUATION METHODS ------------------------------------------- #
@@ -97,7 +110,9 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
     output_path = os.path.expanduser(output_path)
     files = glob.glob(input_path + 'sso_*.pkl')
     reports = {}
-    reports_txt = ""
+    reports_txt = "Confusion matrix: row = true label, column = predicted label \n" \
+                  "Precision: What percentage of points from one label truly belong to that label \n" \
+                  "Recall: What percentage of points from one true label have been predicted as that label \n\n"
     # Arrays for concatenating the labels of all files for later total evaluation
     total_labels = {'pred': np.array([]), 'pred_node': np.array([]), 'gt': np.array([]), 'gt_node': np.array([]),
                     'coverage': [0, 0]}
@@ -125,6 +140,8 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
             f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
             f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
             sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets) + '\n\n'
+        cm = sm.confusion_matrix(total_labels['gt'], total_labels['pred'])
+        total_report_txt += write_confusion_matrix(cm, targets) + '\n\n'
         mode += '_skel'
         if filters:
             mode += '_f'
@@ -135,6 +152,8 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
         total_report_txt += \
             mode + '\n\n' + \
             sm.classification_report(total_labels['gt_node'], total_labels['pred_node'], target_names=targets) + '\n\n'
+        cm_skel = sm.confusion_matrix(total_labels['gt_node'], total_labels['pred_node'])
+        total_report_txt += write_confusion_matrix(cm_skel, targets) + '\n\n'
     reports['total'] = total_report
     reports_txt += total_report_txt
     basics.save2pkl(reports, output_path, name=report_name)
@@ -198,6 +217,8 @@ def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: lis
                    f'Timing: {round(pred2label_timing, 3)} s\n\n' + \
                    f'Number of predictions: {obj.pred_num}\n\n' + \
                    sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
+    cm = sm.confusion_matrix(gtl, hcl)
+    reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
     # Get evaluation for skeletons
     start = time.time()
     mode += '_skel'
@@ -214,6 +235,8 @@ def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: lis
     reports[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
     reports_txt += mode + '\n\n' + f'Timing: {round(map2skel_timing, 3)} s\n\n' + \
                    sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
+    cm = sm.confusion_matrix(gtnl, hcnl)
+    reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
     # save generated labels for total evaluation
     if total is not None:
         total['pred'] = np.append(total['pred'], hcl)
@@ -271,7 +294,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/sp_3/run6/2020_05_26_100_2000/'
+    s_path = '~/thesis/current_work/sp_3/run6/2020_05_26_100_4000/'
     # s_path = '~/thesis/current_work/4-class/run4/2020_04_23_20000_60000_hard/'
     # v_path = '~/thesis/tmp/evaluation/'
     v_path = '~/thesis/gt/sp_gt/voxeled_50/evaluation/'
@@ -280,14 +303,9 @@ if __name__ == '__main__':
     # target_names = ['dendrite', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal']
 
-    # full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=3, batch_num=-1,
-    #                      save_worst_examples=False, val_type='multiple_model', model_freq=20,
-    #                      target_names=target_names)
-
-    for i in range(5):
-        full_evaluation_pipe(s_path, v_path, eval_name=f'eval_221_{i}_red5', pipe_steps=[True, True], val_iter=2, batch_num=-1,
-                             save_worst_examples=False, val_type='multiple_model', model_freq=50, specific_model=221,
-                             target_names=target_names, force_split=True, redundancy=5)
+    full_evaluation_pipe(s_path, v_path, eval_name=f'eval_221', pipe_steps=[False, True], val_iter=2, batch_num=-1,
+                         save_worst_examples=True, val_type='multiple_model', model_freq=20, specific_model=221,
+                         target_names=target_names)
 
     # evaluate existing validation again
     # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
