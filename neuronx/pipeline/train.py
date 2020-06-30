@@ -192,10 +192,10 @@ if __name__ == '__main__':
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/model_tests/',
                              train_path='/u/jklimesch/thesis/gt/20_06_09/voxeled/',
                              sample_num=sample_num,
-                             name=name + f'_gn1',
+                             name=name + f'',
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-30, 30)),
                                                clouds.RandomShear(limits=(-0.1, 0.1)),
@@ -225,7 +225,7 @@ if __name__ == '__main__':
                              dilations=None,
                              reductions=None,
                              first_layer=True,
-                             padding=None)
+                             padding=1000)
     training_thread(argscont)
 
     # 4-class spine
