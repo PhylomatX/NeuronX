@@ -40,7 +40,7 @@ def training_thread(acont: ArgsContainer):
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
                        kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations,
-                       reductions=acont.reductions, first_layer=acont.first_layer)
+                       reductions=acont.reductions, first_layer=acont.first_layer, padding=acont.padding)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -73,7 +73,8 @@ def training_thread(acont: ArgsContainer):
                             hybrid_mode=acont.hybrid_mode,
                             splitting_redundancy=acont.splitting_redundancy,
                             label_remove=acont.label_remove,
-                            sampling=acont.sampling)
+                            sampling=acont.sampling,
+                            padding=acont.padding)
     if acont.use_val:
         val_transforms = clouds.Compose(acont.val_transforms)
         val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
@@ -173,10 +174,10 @@ def training_thread(acont: ArgsContainer):
 if __name__ == '__main__':
     # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
-    density_mode = True
+    density_mode = False
     bio_density = 100
-    sample_num = 4000
-    chunk_size = 2500
+    sample_num = 6000
+    chunk_size = 10000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -191,16 +192,16 @@ if __name__ == '__main__':
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/sp_3/run6/',
-                             train_path='/u/jklimesch/thesis/gt/sp_gt/voxeled_50/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
+                             train_path='/u/jklimesch/thesis/gt/20_06_09/voxeled/',
                              sample_num=sample_num,
-                             name=name + f'_bn',
+                             name=name + f'_gn1',
                              class_num=3,
-                             train_transforms=[clouds.RandomVariation((-50, 50)),
+                             train_transforms=[clouds.RandomVariation((-30, 30)),
                                                clouds.RandomShear(limits=(-0.1, 0.1)),
                                                clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=8,
+                             batch_size=16,
                              input_channels=len(features['sy']),
                              use_val=False,
                              features=features,
@@ -215,20 +216,24 @@ if __name__ == '__main__':
                              optimizer='adam',
                              splitting_redundancy=5,
                              use_bias=False,
-                             norm_type='bn',
+                             use_norm=True,
+                             norm_type='gn',
                              label_remove=[1, 2, 3, 4],
                              sampling=True,
                              kernel_size=16,
                              neighbor_nums=[32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16],
                              dilations=None,
                              reductions=None,
-                             first_layer=True)
+                             first_layer=True,
+                             padding=None)
     training_thread(argscont)
 
     # 4-class spine
     # label_mappings = [(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)]
     # 5-class axon
     # label_mappings=[(5, 0), (6, 0)]
+
+    # neighbor_nums = [32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16]
 
     # features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
     #           'mi': np.array([0, 0, 1, 0, 0]),

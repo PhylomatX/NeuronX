@@ -148,10 +148,11 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
     # load model
     if argscont.use_big:
-        model = SegBig(argscont.input_channels, argscont.class_num, use_bias=argscont.use_bias,
-                       norm_type=argscont.norm_type, kernel_size=argscont.kernel_size,
-                       neighbor_nums=argscont.neighbor_nums, dilations=argscont.dilations,
-                       reductions=argscont.reductions, first_layer=argscont.first_layer)
+        model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
+                       use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
+                       kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
+                       dilations=argscont.dilations, reductions=argscont.reductions, first_layer=argscont.first_layer,
+                       padding=argscont.padding)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     try:
@@ -183,7 +184,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                       label_mappings=argscont.label_mappings, hybrid_mode=argscont.hybrid_mode,
                       feat_dim=argscont.input_channels, splitting_redundancy=redundancy,
                       label_remove=argscont.label_remove, sampling=argscont.sampling,
-                      force_split=force_split)
+                      force_split=force_split, padding=argscont.padding)
     pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=argscont.label_remove)
 
     if batch_num == -1:
@@ -194,11 +195,16 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     attr_dicts = {obj: None for obj in th.obj_names}
     # perform validation
     obj = None
+    obj_names = th.obj_names.copy()
     for obj in th.obj_names:
         # skip trainings where validation has already been generated
         if os.path.exists(out_path + obj + '_preds.pkl'):
             print(obj + " has already been processed. Skipping...")
-            obj = None
+            obj_names.remove(obj)
+            continue
+        if th.get_obj_length(obj) == 0:
+            print(obj + " has no chunks to process. Skipping...")
+            obj_names.remove(obj)
             continue
         print(f"Processing {obj}")
         attr_dict = th.get_obj_info(obj, hybrid_only=True)
@@ -232,16 +238,16 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
     with open(out_path + 'timing.txt', 'a') as f:
         f.write('\nModel timing:\n\n')
-        for idx, item in enumerate(th.obj_names):
+        for idx, item in enumerate(obj_names):
             f.write(f'{item}: \t\t {model_times[idx]} s.\n')
         f.write('\nChunk timing:\n\n')
-        for idx, item in enumerate(th.obj_names):
+        for idx, item in enumerate(obj_names):
             f.write(f'{item}: \t\t {chunk_times[idx]} s.\n')
         f.write('\nMapping timing:\n\n')
-        for idx, item in enumerate(th.obj_names):
+        for idx, item in enumerate(obj_names):
             f.write(f'{item}: \t\t {map_times[idx]} s.\n')
         f.write('\nTotal timing:\n\n')
-        for idx, item in enumerate(th.obj_names):
+        for idx, item in enumerate(obj_names):
             f.write(f'{item}: \t\t {total_times[idx]} s.\n')
         f.close()
 
@@ -292,7 +298,8 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
 
 def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
                                   val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None,
-                                  specific_model: int = None, redundancy: int = -1, force_split: bool = False):
+                                  specific_model: int = None, redundancy: int = -1, force_split: bool = False,
+                                  model_max: int = None):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -330,6 +337,9 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
     if specific_model is None:
         model_idcs = np.arange(1, len(models), model_freq)
         for ix in model_idcs:
+            if model_max is not None:
+                if ix > model_max:
+                    break
             model_type = f'state_dict_e{ix}.pth'
             validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
                        val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
