@@ -334,8 +334,9 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
         print("Model folder was not found in training. The folder must be named 'models'.")
         return
     models = glob.glob(model_path + 'state_dict_*')
+    models.sort()
     if specific_model is None:
-        model_idcs = np.arange(1, len(models), model_freq)
+        model_idcs = np.arange(10, len(models)*model_freq, model_freq)
         for ix in model_idcs:
             if model_max is not None:
                 if ix > model_max:

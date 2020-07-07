@@ -176,8 +176,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 6000
-    chunk_size = 10000
+    sample_num = 2000
+    chunk_size = 3000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -192,10 +192,10 @@ if __name__ == '__main__':
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/model_tests/',
-                             train_path='/u/jklimesch/thesis/gt/20_06_09/voxeled/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
+                             train_path='/u/jklimesch/thesis/gt/sp_gt/cmn_paper/',
                              sample_num=sample_num,
-                             name=name + f'',
+                             name=name + f'_cmn_spgt',
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-30, 30)),
                                                clouds.RandomShear(limits=(-0.1, 0.1)),
@@ -209,12 +209,12 @@ if __name__ == '__main__':
                              tech_density=100,
                              bio_density=bio_density,
                              density_mode=density_mode,
-                             max_step_size=10000000,
+                             max_step_size=1000000,
                              hybrid_mode=False,
                              label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 2)],
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=5,
+                             splitting_redundancy=10,
                              use_bias=False,
                              use_norm=True,
                              norm_type='gn',
@@ -223,9 +223,9 @@ if __name__ == '__main__':
                              kernel_size=16,
                              neighbor_nums=[32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16],
                              dilations=None,
-                             reductions=None,
+                             reductions=[1024, 512, 256, 64, 16, 8],
                              first_layer=True,
-                             padding=1000)
+                             padding=None)
     training_thread(argscont)
 
     # 4-class spine

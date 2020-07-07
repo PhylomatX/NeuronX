@@ -6,7 +6,7 @@ import sklearn.metrics as sm
 from tqdm import tqdm
 from morphx.processing import objects
 from morphx.data import basics
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Union
 from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.pipeline import infer
 from morphx.classes.cloudensemble import CloudEnsemble
@@ -253,7 +253,7 @@ def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: lis
 def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
                          drop_unpreds: bool = True, data_type: str = 'ce', eval_name: str = 'evaluation',
                          pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
-                         val_type: str = 'training_set', model_freq: int = 1, target_names: List[str] = None,
+                         val_type: str = 'training_set', model_freq: Union[int, list] = 1, target_names: List[str] = None,
                          re_evaluation: bool = False, specific_model: int = None, redundancy: int = -1,
                          force_split: bool = False, model_max: int = None):
     """ Runs full pipeline on given training set including validation and evaluation.
@@ -294,19 +294,19 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/ads/2020_06_29_30000_15000_bn3/'
+    s_path = '~/thesis/current_work/paper/dnh/2020_07_03_10000_6000_bn1/'
     # s_path = '~/thesis/current_work/4-class/run4/2020_04_23_20000_60000_hard/'
     # v_path = '~/thesis/tmp/evaluation/'
     v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
     # target_names = ['axon', 'bouton', 'terminal']
-    target_names = ['dendrite', 'axon', 'soma']
-    # target_names = ['dendrite', 'neck', 'head']
+    # target_names = ['dendrite', 'axon', 'soma']
+    target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     # target_names = ['dendrite', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal']
 
-    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=2, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=801,
+    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[False, True], val_iter=2, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=30, model_max=801,
                          target_names=target_names, redundancy=2)
 
     # evaluate existing validation again
