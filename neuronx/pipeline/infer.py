@@ -134,6 +134,9 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
+    if os.path.exists(out_path):
+        print(f"{out_path} already exists. Skipping...")
+        return
 
     if same_seeds:
         # set random seeds to ensure compareability
@@ -152,7 +155,8 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                        use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
                        kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
                        dilations=argscont.dilations, reductions=argscont.reductions, first_layer=argscont.first_layer,
-                       padding=argscont.padding)
+                       padding=argscont.padding, nn_center=argscont.nn_center, centroids=argscont.centroids,
+                       optim_kernels=argscont.optim_kernels, pl=argscont.pl)
     else:
         model = SegSmall(argscont.input_channels, argscont.class_num)
     try:
@@ -336,7 +340,7 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
     models = glob.glob(model_path + 'state_dict_*')
     models.sort()
     if specific_model is None:
-        model_idcs = np.arange(10, len(models)*model_freq, model_freq)
+        model_idcs = np.arange(0, len(models)*model_freq, model_freq)
         for ix in model_idcs:
             if model_max is not None:
                 if ix > model_max:

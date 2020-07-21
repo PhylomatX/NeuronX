@@ -245,7 +245,7 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
 
 if __name__ == '__main__':
     report_name = 'eval_mv'
-    o_path = '~/thesis/current_work/paper/dnh/2020_06_30_10000_6000_gn1/eval_valiter2_batchsize-1/'
+    o_path = '~/thesis/current_work/paper/dnh/2020_07_20_10000_5000_spgt/eval_valiter2_batchsize-1/'
     summarize_reports(o_path, report_name)
     r_path = o_path + report_name + '.pkl'
     generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',

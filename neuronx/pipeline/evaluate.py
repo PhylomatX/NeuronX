@@ -8,7 +8,7 @@ from morphx.processing import objects
 from morphx.data import basics
 from typing import List, Tuple, Dict, Union
 from neuronx.classes.argscontainer import ArgsContainer
-from neuronx.pipeline import infer
+from neuronx.pipeline import infer, analyse
 from morphx.classes.cloudensemble import CloudEnsemble
 
 
@@ -47,7 +47,8 @@ def write_confusion_matrix(cm: np.array, names: list) -> str:
 
 def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: bool = False,
                         re_evaluation: bool = False, drop_unpreds: bool = True, data_type: str = 'ce',
-                        eval_name: str = 'evaluation', targets: list = None):
+                        eval_name: str = 'evaluation', targets: list = None,
+                        label_mappings: List[Tuple[int, int]] = None):
     """ Evaluates validations from multiple trainings.
 
     Args:
@@ -78,7 +79,7 @@ def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: b
         argscont = ArgsContainer().load_from_pkl(di_in_path + 'argscont.pkl')
         report = eval_validation(di_in_path, di_out_path, argscont, report_name=eval_name, total=total, mode=mode,
                                  filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
-                                 targets=targets)
+                                 targets=targets, label_mappings=label_mappings)
         report.update(argscont.attr_dict)
         reports[di] = report
     basics.save2pkl(reports, set_path, name=eval_name)
@@ -86,7 +87,7 @@ def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: b
 
 def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, report_name: str = 'Evaluation',
                     total: bool = False, mode: str = 'mvs', filters: bool = False, drop_unpreds: bool = True,
-                    data_type: str = 'ce', targets: list = None):
+                    data_type: str = 'ce', targets: list = None, label_mappings: List[Tuple[int, int]] = None):
     """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
         ground truth files with different filters or under different conditions.
 
@@ -120,9 +121,11 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
     for file in tqdm(files):
         slashs = [pos for pos, char in enumerate(file) if char == '/']
         name = file[slashs[-1] + 1:-4]
+        if label_mappings is None:
+            label_mappings = argscont.label_mappings
         report, report_txt = eval_obj(file, total_labels, mode=mode, target_names=targets, filters=filters,
                                       drop_unpreds=drop_unpreds, data_type=data_type,
-                                      label_mapping=argscont.label_mappings, label_remove=argscont.label_remove)
+                                      label_mapping=label_mappings, label_remove=argscont.label_remove)
         reports[name] = report
         reports_txt += name + '\n\n' + report_txt + '\n\n\n'
     # Perform evaluation on total label arrays (labels from all files sticked together), prediction
@@ -255,7 +258,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
                          pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
                          val_type: str = 'training_set', model_freq: Union[int, list] = 1, target_names: List[str] = None,
                          re_evaluation: bool = False, specific_model: int = None, redundancy: int = -1,
-                         force_split: bool = False, model_max: int = None):
+                         force_split: bool = False, model_max: int = None, label_mappings: List[Tuple[int, int]] = None):
     """ Runs full pipeline on given training set including validation and evaluation.
 
     Args:
@@ -289,25 +292,29 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
     if pipe_steps[1]:
         # evaluate validations
         eval_validation_set(out_path, total=total, mode=mode, filters=filters, drop_unpreds=drop_unpreds,
-                            data_type=data_type, eval_name=eval_name, targets=target_names, re_evaluation=re_evaluation)
+                            data_type=data_type, eval_name=eval_name, targets=target_names, re_evaluation=re_evaluation,
+                            label_mappings=label_mappings)
 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/dnh/2020_07_03_10000_6000_bn1/'
-    # s_path = '~/thesis/current_work/4-class/run4/2020_04_23_20000_60000_hard/'
-    # v_path = '~/thesis/tmp/evaluation/'
-    v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
-    # target_names = ['axon', 'bouton', 'terminal']
-    # target_names = ['dendrite', 'axon', 'soma']
-    target_names = ['dendrite', 'neck', 'head']
+    s_path = '~/thesis/current_work/paper/dnh/2020_07_20_10000_5000_spgt/'
+    # v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
+    v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
+    target_names = ['dendrite', 'neck', 'other', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
-    # target_names = ['dendrite', 'other', 'neck', 'head']
-    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal']
 
     full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[False, True], val_iter=2, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=30, model_max=801,
-                         target_names=target_names, redundancy=2)
+                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=350,
+                         target_names=target_names, redundancy=2,
+                         label_mappings=[(1, 2), (3, 2), (4, 2), (5, 1), (6, 3)])
+
+    report_name = 'eval_mv'
+    o_path = s_path + 'eval_valiter2_batchsize-1/'
+    analyse.summarize_reports(o_path, report_name)
+    r_path = o_path + report_name + '.pkl'
+    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
+                              filter_identifier=False, neg_identifier=[], time=True)
 
     # evaluate existing validation again
     # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'

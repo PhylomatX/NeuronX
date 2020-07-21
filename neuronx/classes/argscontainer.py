@@ -49,7 +49,14 @@ class ArgsContainer(object):
                  dilations: List[int] = None,
                  reductions: List[int] = None,
                  first_layer: bool = True,
-                 padding: int = None):
+                 padding: int = None,
+                 centroids: bool = False,
+                 nn_center: bool = True,
+                 optim_kernels: bool = True,
+                 pl: int = 64,
+                 dropout: float = 0,
+                 split_on_demand: bool = False,
+                 split_jitter: int = 0):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -133,6 +140,13 @@ class ArgsContainer(object):
         self._reductions = reductions
         self._first_layer = first_layer
         self._padding = padding
+        self._centroids = centroids
+        self._nn_center = nn_center
+        self._optim_kernels = optim_kernels
+        self._pl = pl
+        self._dropout = dropout
+        self._split_on_demand = split_on_demand
+        self._split_jitter = split_jitter
 
     @property
     def normalization(self):
@@ -309,6 +323,34 @@ class ArgsContainer(object):
         return self._padding
 
     @property
+    def centroids(self):
+        return self._centroids
+
+    @property
+    def nn_center(self):
+        return self._nn_center
+
+    @property
+    def optim_kernels(self):
+        return self._optim_kernels
+
+    @property
+    def pl(self):
+        return self._pl
+
+    @property
+    def dropout(self):
+        return self._dropout
+
+    @property
+    def split_on_demand(self):
+        return self._split_on_demand
+
+    @property
+    def split_jitter(self):
+        return self._split_jitter
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -350,7 +392,14 @@ class ArgsContainer(object):
                      'dilations': self._dilations,
                      'reductions': self._reductions,
                      'first_layer': self._first_layer,
-                     'padding': self._padding}
+                     'padding': self._padding,
+                     'centroids': self._centroids,
+                     'nn_center': self._nn_center,
+                     'optim_kernels': self._optim_kernels,
+                     'pl': self._pl,
+                     'dropout': self._dropout,
+                     'split_on_demand': self._split_on_demand,
+                     'split_jitter': self._split_jitter}
         return attr_dict
 
     def save2pkl(self, path: str):

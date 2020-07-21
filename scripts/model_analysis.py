@@ -35,8 +35,6 @@ def analyse_layer(model_path: str, layer: int, filter: int, opt_steps: int, out_
 
     activations = SaveFeatures(list(model.children())[layer])
 
-
-
     pts = torch.rand(1, argscont.sample_num, 3, device=device, requires_grad=True)
     feats = torch.rand(1, argscont.sample_num, argscont.input_channels, device=device)
     feats[0][:] = torch.tensor([1, 0, 0, 0])
@@ -61,7 +59,6 @@ def analyse_layer(model_path: str, layer: int, filter: int, opt_steps: int, out_
 
     pc = PointCloud(pts, labels)
     pc.save2pkl(out_path)
-
 
 
 if __name__ == '__main__':

@@ -37,10 +37,12 @@ def training_thread(acont: ArgsContainer):
 
     # load model
     if acont.use_big:
-        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=0,
+        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=acont.dropout,
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
                        kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations,
-                       reductions=acont.reductions, first_layer=acont.first_layer, padding=acont.padding)
+                       reductions=acont.reductions, first_layer=acont.first_layer, padding=acont.padding,
+                       nn_center=acont.nn_center, centroids=acont.centroids, optim_kernels=acont.optim_kernels,
+                       pl=acont.pl)
     else:
         model = SegSmall(acont.input_channels, acont.class_num)
 
@@ -74,7 +76,9 @@ def training_thread(acont: ArgsContainer):
                             splitting_redundancy=acont.splitting_redundancy,
                             label_remove=acont.label_remove,
                             sampling=acont.sampling,
-                            padding=acont.padding)
+                            padding=acont.padding,
+                            split_on_demand=acont.split_on_demand,
+                            split_jitter=acont.split_jitter)
     if acont.use_val:
         val_transforms = clouds.Compose(acont.val_transforms)
         val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
@@ -176,8 +180,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 2000
-    chunk_size = 3000
+    sample_num = 5000
+    chunk_size = 5000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -193,13 +197,14 @@ if __name__ == '__main__':
                 'sy': np.array([0, 0, 0, 1])}
 
     argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
-                             train_path='/u/jklimesch/thesis/gt/sp_gt/cmn_paper/',
+                             train_path='/u/jklimesch/thesis/gt/cmn/dnh/voxeled/',
                              sample_num=sample_num,
-                             name=name + f'_cmn_spgt',
-                             class_num=3,
-                             train_transforms=[clouds.RandomVariation((-30, 30)),
-                                               clouds.RandomShear(limits=(-0.1, 0.1)),
-                                               clouds.RandomRotate(apply_flip=True), clouds.Normalization(normalization),
+                             name=name + f'_spgt_ondemand',
+                             class_num=4,
+                             train_transforms=[clouds.RandomVariation((-40, 40)),
+                                               clouds.RandomShear(limits=(-0.15, 0.15)),
+                                               clouds.RandomRotate(apply_flip=True),
+                                               clouds.Normalization(normalization),
                                                clouds.Center()],
                              batch_size=16,
                              input_channels=len(features['sy']),
@@ -209,23 +214,30 @@ if __name__ == '__main__':
                              tech_density=100,
                              bio_density=bio_density,
                              density_mode=density_mode,
-                             max_step_size=1000000,
+                             max_step_size=10000000,
                              hybrid_mode=False,
-                             label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 2)],
+                             label_mappings=[(5, 1), (6, 3)],
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=10,
+                             splitting_redundancy=1,
                              use_bias=False,
                              use_norm=True,
                              norm_type='gn',
-                             label_remove=[1, 2, 3, 4],
+                             label_remove=None,
                              sampling=True,
                              kernel_size=16,
                              neighbor_nums=[32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16],
                              dilations=None,
-                             reductions=[1024, 512, 256, 64, 16, 8],
+                             reductions=None,
                              first_layer=True,
-                             padding=None)
+                             padding=None,
+                             centroids=False,
+                             nn_center=True,
+                             optim_kernels=True,
+                             pl=64,
+                             dropout=0,
+                             split_on_demand=True,
+                             split_jitter=500)
     training_thread(argscont)
 
     # 4-class spine
