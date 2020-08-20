@@ -4,6 +4,7 @@ import time
 import numpy as np
 import sklearn.metrics as sm
 from tqdm import tqdm
+import open3d as o3d
 from morphx.processing import objects
 from morphx.data import basics
 from typing import List, Tuple, Dict, Union
@@ -48,7 +49,7 @@ def write_confusion_matrix(cm: np.array, names: list) -> str:
 def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: bool = False,
                         re_evaluation: bool = False, drop_unpreds: bool = True, data_type: str = 'ce',
                         eval_name: str = 'evaluation', targets: list = None,
-                        label_mappings: List[Tuple[int, int]] = None):
+                        label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None):
     """ Evaluates validations from multiple trainings.
 
     Args:
@@ -79,7 +80,7 @@ def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: b
         argscont = ArgsContainer().load_from_pkl(di_in_path + 'argscont.pkl')
         report = eval_validation(di_in_path, di_out_path, argscont, report_name=eval_name, total=total, mode=mode,
                                  filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
-                                 targets=targets, label_mappings=label_mappings)
+                                 targets=targets, label_mappings=label_mappings, label_remove=label_remove)
         report.update(argscont.attr_dict)
         reports[di] = report
     basics.save2pkl(reports, set_path, name=eval_name)
@@ -87,7 +88,8 @@ def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: b
 
 def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, report_name: str = 'Evaluation',
                     total: bool = False, mode: str = 'mvs', filters: bool = False, drop_unpreds: bool = True,
-                    data_type: str = 'ce', targets: list = None, label_mappings: List[Tuple[int, int]] = None):
+                    data_type: str = 'ce', targets: list = None, label_mappings: List[Tuple[int, int]] = None,
+                    label_remove: List[int] = None):
     """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
         ground truth files with different filters or under different conditions.
 
@@ -121,11 +123,13 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
     for file in tqdm(files):
         slashs = [pos for pos, char in enumerate(file) if char == '/']
         name = file[slashs[-1] + 1:-4]
+        if label_remove is None:
+            label_remove = argscont.label_remove
         if label_mappings is None:
             label_mappings = argscont.label_mappings
         report, report_txt = eval_obj(file, total_labels, mode=mode, target_names=targets, filters=filters,
                                       drop_unpreds=drop_unpreds, data_type=data_type,
-                                      label_mapping=label_mappings, label_remove=argscont.label_remove)
+                                      label_mapping=label_mappings, label_remove=label_remove)
         reports[name] = report
         reports_txt += name + '\n\n' + report_txt + '\n\n\n'
     # Perform evaluation on total label arrays (labels from all files sticked together), prediction
@@ -258,7 +262,8 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
                          pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
                          val_type: str = 'training_set', model_freq: Union[int, list] = 1, target_names: List[str] = None,
                          re_evaluation: bool = False, specific_model: int = None, redundancy: int = -1,
-                         force_split: bool = False, model_max: int = None, label_mappings: List[Tuple[int, int]] = None):
+                         force_split: bool = False, model_max: int = None, label_mappings: List[Tuple[int, int]] = None,
+                         label_remove: List[int] = None, same_seeds: bool = False):
     """ Runs full pipeline on given training set including validation and evaluation.
 
     Args:
@@ -286,31 +291,80 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
             infer.validate_multi_model_training(set_path, val_path, out_path, model_freq, val_iter=val_iter,
                                                 batch_num=batch_num, cloud_out_path=cloud_out_path,
                                                 specific_model=specific_model, redundancy=redundancy,
-                                                force_split=force_split, model_max=model_max)
+                                                force_split=force_split, model_max=model_max,
+                                                label_mappings=label_mappings, label_remove=label_remove,
+                                                same_seeds=same_seeds)
         else:
             raise ValueError("val_type not known.")
     if pipe_steps[1]:
         # evaluate validations
         eval_validation_set(out_path, total=total, mode=mode, filters=filters, drop_unpreds=drop_unpreds,
                             data_type=data_type, eval_name=eval_name, targets=target_names, re_evaluation=re_evaluation,
-                            label_mappings=label_mappings)
+                            label_mappings=label_mappings, label_remove=label_remove)
 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/dnh/2020_07_20_10000_5000_spgt/'
+    s_path = '~/thesis/current_work/paper/dnh/2020_08_11_4000_4000_spgt_ds_large/'
     # v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
     v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
-    target_names = ['dendrite', 'neck', 'other', 'head']
+    # target_names = ['dendrite', 'neck', 'head']
+    target_names = ['dendrite', 'spine']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
 
-    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[False, True], val_iter=2, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=350,
-                         target_names=target_names, redundancy=2,
-                         label_mappings=[(1, 2), (3, 2), (4, 2), (5, 1), (6, 3)])
+    # full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=2, batch_num=-1,
+    #                      save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=370,
+    #                      target_names=target_names, redundancy=2)
+
+    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=660,
+                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
+                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
 
     report_name = 'eval_mv'
-    o_path = s_path + 'eval_valiter2_batchsize-1/'
+    o_path = s_path + 'eval_valiter1_batchsize-1/'
+    analyse.summarize_reports(o_path, report_name)
+    r_path = o_path + report_name + '.pkl'
+    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
+                              filter_identifier=False, neg_identifier=[], time=True)
+
+    s_path = '~/thesis/current_work/paper/dnh/2020_08_11_4000_4000_spgt_ds_no_co/'
+
+    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=800,
+                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
+                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
+
+    report_name = 'eval_mv'
+    o_path = s_path + 'eval_valiter1_batchsize-1/'
+    analyse.summarize_reports(o_path, report_name)
+    r_path = o_path + report_name + '.pkl'
+    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
+                              filter_identifier=False, neg_identifier=[], time=True)
+
+    s_path = '~/thesis/current_work/paper/dnh/2020_08_13_2000_2000_spgt_ds_large_randelastic/'
+
+    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=20, model_max=240,
+                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
+                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
+
+    report_name = 'eval_mv'
+    o_path = s_path + 'eval_valiter1_batchsize-1/'
+    analyse.summarize_reports(o_path, report_name)
+    r_path = o_path + report_name + '.pkl'
+    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
+                              filter_identifier=False, neg_identifier=[], time=True)
+
+    s_path = '~/thesis/current_work/paper/dnh/2020_08_13_10000_10000_spgt_ds_large_randelastic/'
+
+    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=480,
+                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
+                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
+
+    report_name = 'eval_mv'
+    o_path = s_path + 'eval_valiter1_batchsize-1/'
     analyse.summarize_reports(o_path, report_name)
     r_path = o_path + report_name + '.pkl'
     analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',

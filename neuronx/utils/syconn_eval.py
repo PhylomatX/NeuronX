@@ -20,6 +20,10 @@ def get_preds(sso: SuperSegmentationObject, key: str):
 
 
 def replace_preds(sso: SuperSegmentationObject, base: str, replace: List[Tuple[int, str, List[Tuple[int, int]]]]):
+    """
+    Args:
+        replace: (int, str, mappings) - In base, replace labels with int by labels from str, mapped by mappings.
+    """
     labels = sso.label_dict()[base]
     for item in replace:
         replace_labels = sso.label_dict()[item[1]]

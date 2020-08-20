@@ -1,3 +1,5 @@
+# do not remove open3d as import order of open3d and torch is important ###
+import open3d as o3d
 import torch
 import random
 import warnings
@@ -11,10 +13,11 @@ from syconn import global_params
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
-from elektronn3.models.convpoint import SegSmall, SegBig
+from elektronn3.models.convpoint import SegAdapt, SegBig
 from elektronn3.training import Trainer3d, Backup
 from neuronx.classes.argscontainer import ArgsContainer
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
+from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
 def training_thread(acont: ArgsContainer):
@@ -41,10 +44,13 @@ def training_thread(acont: ArgsContainer):
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
                        kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations,
                        reductions=acont.reductions, first_layer=acont.first_layer, padding=acont.padding,
-                       nn_center=acont.nn_center, centroids=acont.centroids, optim_kernels=acont.optim_kernels,
-                       pl=acont.pl)
+                       nn_center=acont.nn_center, centroids=acont.centroids, pl=acont.pl, normalize=acont.cp_norm)
     else:
-        model = SegSmall(acont.input_channels, acont.class_num)
+        model = SegAdapt(acont.input_channels, acont.class_num, architecture=acont.architecture,
+                         trs=acont.track_running_stats, dropout=acont.dropout, use_bias=acont.use_bias,
+                         norm_type=acont.norm_type, kernel_size=acont.kernel_size, padding=acont.padding,
+                         nn_center=acont.nn_center, centroids=acont.centroids, kernel_num=acont.pl,
+                         normalize=acont.cp_norm, act=acont.act)
 
     batch_size = acont.batch_size
     if acont.use_cuda:
@@ -64,7 +70,10 @@ def training_thread(acont: ArgsContainer):
 
     # set up environment
     train_transforms = clouds.Compose(acont.train_transforms)
-    train_ds = TorchHandler(acont.train_path, acont.sample_num, acont.class_num, acont.input_channels,
+    train_ds = TorchHandler(data_path=acont.train_path,
+                            sample_num=acont.sample_num,
+                            nclasses=acont.class_num,
+                            feat_dim=acont.input_channels,
                             density_mode=acont.density_mode,
                             chunk_size=acont.chunk_size,
                             bio_density=acont.bio_density,
@@ -78,7 +87,14 @@ def training_thread(acont: ArgsContainer):
                             sampling=acont.sampling,
                             padding=acont.padding,
                             split_on_demand=acont.split_on_demand,
-                            split_jitter=acont.split_jitter)
+                            split_jitter=acont.split_jitter,
+                            epoch_size=acont.epoch_size,
+                            workers=acont.workers,
+                            voxel_sizes=acont.voxel_sizes,
+                            ssd_exclude=acont.ssd_exclude,
+                            ssd_include=acont.ssd_include,
+                            ssd_labels=acont.ssd_labels)
+
     if acont.use_val:
         val_transforms = clouds.Compose(acont.val_transforms)
         val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
@@ -180,8 +196,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 5000
-    chunk_size = 5000
+    sample_num = 4000
+    chunk_size = 4000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -191,23 +207,31 @@ if __name__ == '__main__':
     else:
         normalization = chunk_size
 
-    features = {'hc': np.array([1, 0, 0, 0]),
-                'mi': np.array([0, 1, 0, 0]),
-                'vc': np.array([0, 0, 1, 0]),
-                'sy': np.array([0, 0, 0, 1])}
+    # features = {'hc': np.array([1, 0, 0, 0]),
+    #             'mi': np.array([0, 1, 0, 0]),
+    #             'vc': np.array([0, 0, 1, 0]),
+    #             'sy': np.array([0, 0, 0, 1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
-                             train_path='/u/jklimesch/thesis/gt/cmn/dnh/voxeled/',
+    # train_transforms = [clouds.RandomVariation((-40, 40)),
+    #                     clouds.RandomRotate(apply_flip=True),
+    #                     clouds.Center(),
+    #                     clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000)),
+    #                     clouds.RandomScale(distr_scale=0.6),
+    #                     clouds.Normalization(normalization),
+    #                     clouds.Center()]
+
+    features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
+
+    # features = {'hc': np.array([1])}
+
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/multiview/',
+                             train_path=SuperSegmentationDataset(working_dir="/wholebrain/songbird/j0126/areaxfs_v6/"),
                              sample_num=sample_num,
-                             name=name + f'_spgt_ondemand',
+                             name=name + f'',
                              class_num=4,
-                             train_transforms=[clouds.RandomVariation((-40, 40)),
-                                               clouds.RandomShear(limits=(-0.15, 0.15)),
-                                               clouds.RandomRotate(apply_flip=True),
-                                               clouds.Normalization(normalization),
-                                               clouds.Center()],
+                             train_transforms=[clouds.Normalization(normalization), clouds.Center()],
                              batch_size=16,
-                             input_channels=len(features['sy']),
+                             input_channels=4,
                              use_val=False,
                              features=features,
                              chunk_size=chunk_size,
@@ -216,38 +240,25 @@ if __name__ == '__main__':
                              density_mode=density_mode,
                              max_step_size=10000000,
                              hybrid_mode=False,
-                             label_mappings=[(5, 1), (6, 3)],
                              scheduler='steplr',
                              optimizer='adam',
                              splitting_redundancy=1,
-                             use_bias=False,
-                             use_norm=True,
+                             label_mappings=[(3, 2), (4, 3), (5, 1), (6, 1)],
                              norm_type='gn',
-                             label_remove=None,
-                             sampling=True,
                              kernel_size=16,
-                             neighbor_nums=[32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16],
-                             dilations=None,
-                             reductions=None,
-                             first_layer=True,
                              padding=None,
                              centroids=False,
-                             nn_center=True,
-                             optim_kernels=True,
-                             pl=64,
+                             pl=32,
                              dropout=0,
-                             split_on_demand=True,
-                             split_jitter=500)
+                             cp_norm=False,
+                             use_big=False,
+                             architecture=None,
+                             epoch_size=1000,
+                             workers=5,
+                             ssd_include=[2734465, 2854913, 8003584, 8339462, 10919937, 15933443, 15982592, 16096256,
+                                          16113665, 18556928, 18571264, 23144450, 23400450, 24414208, 26169344,
+                                          26501121, 31967234, 33581058],
+                             ssd_labels='axoness')
     training_thread(argscont)
 
-    # 4-class spine
-    # label_mappings = [(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)]
-    # 5-class axon
-    # label_mappings=[(5, 0), (6, 0)]
 
-    # neighbor_nums = [32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16]
-
-    # features={'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
-    #           'mi': np.array([0, 0, 1, 0, 0]),
-    #           'vc': np.array([0, 0, 0, 1, 0]),
-    #           'sy': np.array([0, 0, 0, 0, 1])}

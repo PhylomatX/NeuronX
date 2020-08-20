@@ -9,11 +9,12 @@ import numpy as np
 from tqdm import tqdm
 from torch import nn
 from morphx.data import basics
+from typing import List, Tuple
 from morphx.processing import clouds
 from morphx.data.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
-from elektronn3.models.convpoint import SegSmall, SegBig
+from elektronn3.models.convpoint import SegAdapt, SegBig
 from neuronx.classes.argscontainer import ArgsContainer
 
 
@@ -130,7 +131,8 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
 
 def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_path: str,
                model_type: str = 'state_dict.pth', val_iter: int = 1, batch_num: int = -1,
-               cloud_out_path: str = None, redundancy: int = -1, force_split: bool = False, same_seeds: bool = False):
+               cloud_out_path: str = None, redundancy: int = -1, force_split: bool = False, same_seeds: bool = False,
+               label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None):
     training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
@@ -156,9 +158,14 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                        kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
                        dilations=argscont.dilations, reductions=argscont.reductions, first_layer=argscont.first_layer,
                        padding=argscont.padding, nn_center=argscont.nn_center, centroids=argscont.centroids,
-                       optim_kernels=argscont.optim_kernels, pl=argscont.pl)
+                       pl=argscont.pl, normalize=argscont.cp_norm)
     else:
-        model = SegSmall(argscont.input_channels, argscont.class_num)
+        print("Adaptable model was found!")
+        model = SegAdapt(argscont.input_channels, argscont.class_num, architecture=argscont.architecture,
+                         trs=argscont.track_running_stats, dropout=argscont.dropout, use_bias=argscont.use_bias,
+                         norm_type=argscont.norm_type, kernel_size=argscont.kernel_size, padding=argscont.padding,
+                         nn_center=argscont.nn_center, centroids=argscont.centroids, kernel_num=argscont.pl,
+                         normalize=argscont.cp_norm, act=argscont.act)
     try:
         full = torch.load(training_path + model_type)
         model.load_state_dict(full)
@@ -181,15 +188,19 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
     if redundancy == -1:
         redundancy = argscont.splitting_redundancy
+    if label_remove is None:
+        label_remove = argscont.label_remove
+    if label_mappings is None:
+        label_mappings = argscont.label_mappings
 
     th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
                       specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size,
-                      label_mappings=argscont.label_mappings, hybrid_mode=argscont.hybrid_mode,
+                      label_mappings=label_mappings, hybrid_mode=argscont.hybrid_mode,
                       feat_dim=argscont.input_channels, splitting_redundancy=redundancy,
-                      label_remove=argscont.label_remove, sampling=argscont.sampling,
+                      label_remove=label_remove, sampling=argscont.sampling,
                       force_split=force_split, padding=argscont.padding)
-    pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=argscont.label_remove)
+    pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=label_remove, hybrid_mode=argscont.hybrid_mode)
 
     if batch_num == -1:
         batch_size = argscont.batch_size
@@ -303,7 +314,8 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
 def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
                                   val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None,
                                   specific_model: int = None, redundancy: int = -1, force_split: bool = False,
-                                  model_max: int = None):
+                                  model_max: int = None, label_mappings: List[Tuple[int, int]] = None,
+                                  label_remove: List[int] = None, same_seeds: bool = False):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -348,10 +360,12 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
             model_type = f'state_dict_e{ix}.pth'
             validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
                        val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                       force_split=force_split)
+                       force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
+                       same_seeds=same_seeds)
     else:
         model_type = f'state_dict_e{specific_model}.pth'
         validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
                    val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                   force_split=force_split)
+                   force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
+                   same_seeds=same_seeds)
 

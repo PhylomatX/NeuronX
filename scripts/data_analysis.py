@@ -3,6 +3,7 @@ import pickle
 from morphx.data.chunkhandler import ChunkHandler
 from morphx.processing import clouds
 import numpy as np
+from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
 def produce_chunks():
@@ -63,25 +64,32 @@ def produce_chunks():
 
 def compare_chunks():
     """ Create chunks with different ChunkHandlers and compare the results. """
-    path = os.path.expanduser('~/thesis/gt/test_gt/')
+    path = os.path.expanduser('~/thesis/current_work/augmentation_tests/')
     features = {'hc': np.array([1, 0, 0, 0]),
                 'mi': np.array([0, 1, 0, 0]),
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
-    transforms1 = clouds.Compose([clouds.Center(), clouds.RandomShear(limits=(-0.5, 0.5))])
-    ch1 = ChunkHandler(path, sample_num=10000, density_mode=False, specific=True, chunk_size=10000,
+    transforms1 = clouds.Compose([clouds.Center(), clouds.RandomScale(distr_scale=0.6, distr='uniform')])
+    ch1 = ChunkHandler(path, sample_num=4000, density_mode=False, specific=True, chunk_size=4000,
                        obj_feats=features, transform=transforms1)
     transforms2 = clouds.Compose([clouds.Center()])
-    ch2 = ChunkHandler(path, sample_num=10000, density_mode=False, specific=True, chunk_size=10000,
+    ch2 = ChunkHandler(path, sample_num=4000, density_mode=False, specific=True, chunk_size=4000,
                        obj_feats=features, transform=transforms2)
-    item = ch1.obj_names[2]
-    for i in range(4):
-        sample1, _ = ch1[(item, i)]
-        sample2, _ = ch2[(item, i)]
-        samples = [sample1, sample2]
-        with open(f'{path}shear_vis/{item}_{i}_05.pkl', 'wb') as f:
-            pickle.dump(samples, f)
-        f.close()
+    save_path = path+'scale/'
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+    for item in ch1.obj_names:
+        for i in range(10):
+            sample1, _ = ch1[(item, i)]
+            sample2, _ = ch2[(item, i)]
+            samples = [sample1, sample2]
+            # meshes = [clouds.merge_clouds([sample1, meshes[0]]), clouds.merge_clouds([sample2, meshes[0]])]
+            with open(f'{save_path}{item}_{i}.pkl', 'wb') as f:
+                pickle.dump(samples, f)
+            f.close()
+            # with open(f'{save_path}{item}_{i}_meshes.pkl', 'wb') as f:
+            #     pickle.dump(meshes, f)
+            # f.close()
 
 
 def apply_chunkhandler():
@@ -100,5 +108,30 @@ def apply_chunkhandler():
             sample = ch[ix]
 
 
+def apply_chunkhandler_ssd():
+    data = SuperSegmentationDataset(working_dir="/wholebrain/songbird/j0126/areaxfs_v6/")
+    ssd_include = [491527, 1090051]
+    chunk_size = 4000
+    features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
+    transform = clouds.Compose([clouds.Center()])
+
+    ch = ChunkHandler(data=data, sample_num=4000, density_mode=False, specific=False, chunk_size=chunk_size,
+                      obj_feats=features, splitting_redundancy=1, sampling=True,
+                      transform=transform, ssd_include=ssd_include, ssd_labels='axoness',
+                      label_mappings=[(3, 2), (4, 3), (5, 1), (6, 1)])
+
+    save_path = os.path.expanduser('~/thesis/current_work/chunkhandler_tests/')
+    ix = 0
+    while ix < 500:
+        sample1 = ch[ix]
+        sample2 = ch[ix+1]
+        ix += 2
+        sample = [sample1, sample2]
+        with open(f'{save_path}{ix}.pkl', 'wb') as f:
+            pickle.dump(sample, f)
+        f.close()
+    ch.terminate()
+
+
 if __name__ == '__main__':
-    apply_chunkhandler()
+    apply_chunkhandler_ssd()

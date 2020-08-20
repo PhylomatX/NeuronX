@@ -50,7 +50,7 @@ def variance_report(in_path: str, out_path: str, epoch: int):
         for key in ['mv', 'mv_skel']:
             report += key + '\n\n'
             report += f"\n{f'score':<20}{'std':<20}{'rel (%)':<20}{'mean'}"
-            for subkey in ['dendrite', 'neck', 'head', 'macro avg', 'weighted avg']:
+            for subkey in ['dendrite', 'spine', 'macro avg', 'weighted avg']:
                 stds, result = analyse_variance(in_path, f'epoch_{epoch}', [key, subkey, 'f1-score'])
                 report += f"\n{f'{subkey}:':<20}{round(stds[cell], 4):<20}{round(stds[cell]/np.mean(result[cell])*100, 2):<20}{np.round(np.mean(result[cell]), 4)}"
             stds, result = analyse_variance(in_path, f'epoch_{epoch}', [key, 'accuracy'])
@@ -62,6 +62,6 @@ def variance_report(in_path: str, out_path: str, epoch: int):
 
 
 if __name__ == '__main__':
-    path = '~/thesis/current_work/sp_3/variance_analysis/2020_05_26_100_2000/red5/'
+    path = '~/thesis/current_work/paper/variance_analysis/2020_07_28_10000_10000_spgt_ds_no_co/'
     # analyse_variance(path, 'epoch_101', ['mv', 'head', 'f1-score'])
-    variance_report(path, path + 'std_report.txt', 221)
+    variance_report(path, path + 'std_report.txt', 200)

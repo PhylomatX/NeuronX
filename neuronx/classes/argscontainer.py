@@ -2,15 +2,16 @@ import os
 import numpy as np
 import pickle
 import torch
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 from morphx.data import basics
 from morphx.processing import clouds
+from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
 class ArgsContainer(object):
     def __init__(self,
                  save_root: str = None,
-                 train_path: str = None,
+                 train_path: Union[str, SuperSegmentationDataset] = None,
                  sample_num: int = None,
                  name: str = None,
                  class_num: int = None,
@@ -56,7 +57,16 @@ class ArgsContainer(object):
                  pl: int = 64,
                  dropout: float = 0,
                  split_on_demand: bool = False,
-                 split_jitter: int = 0):
+                 split_jitter: int = 0,
+                 cp_norm: bool = False,
+                 architecture: List[tuple] = None,
+                 act: str = None,
+                 epoch_size: int = None,
+                 workers: int = 2,
+                 voxel_sizes: Optional[dict] = None,
+                 ssd_exclude: List[int] = None,
+                 ssd_include: List[int] = None,
+                 ssd_labels: str = None):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -64,10 +74,10 @@ class ArgsContainer(object):
         else:
             self._save_root = None
             self._train_save_path = None
-        if train_path is not None:
+        if type(train_path) != SuperSegmentationDataset:
             self._train_path = os.path.expanduser(train_path)
         else:
-            self._train_path = None
+            self._train_path = train_path
         self._name = name
         self._class_num = class_num
         self._sample_num = sample_num
@@ -77,17 +87,17 @@ class ArgsContainer(object):
             self._train_transforms = [clouds.Identity()]
         self._input_channels = input_channels
         self._features = features
-        if self._features is not None:
-            for key in self._features.keys():
-                if isinstance(self._features[key], dict):
-                    for item in self._features[key]:
-                        if len(self._features[key][item]) != self._input_channels:
-                            raise ValueError("Feature dimension doesn't match with number of input channels.")
-                elif isinstance(self._features[key], int):
-                    if self._input_channels != 1:
-                        raise ValueError("Feature dimension doesn't match with number of input channels.")
-                elif len(self._features[key]) != self._input_channels:
-                    raise ValueError("Feature dimension doesn't match with number of input channels.")
+        # if self._features is not None:
+        #     for key in self._features.keys():
+        #         if isinstance(self._features[key], dict):
+        #             for item in self._features[key]:
+        #                 if len(self._features[key][item]) != self._input_channels:
+        #                     raise ValueError("Feature dimension doesn't match with number of input channels.")
+        #         elif isinstance(self._features[key], int):
+        #             if self._input_channels != 1:
+        #                 raise ValueError("Feature dimension doesn't match with number of input channels.")
+        #         elif len(self._features[key]) != self._input_channels:
+        #             raise ValueError("Feature dimension doesn't match with number of input channels.")
         self._density_mode = density_mode
         self._chunk_size = chunk_size
         self._tech_density = tech_density
@@ -147,6 +157,15 @@ class ArgsContainer(object):
         self._dropout = dropout
         self._split_on_demand = split_on_demand
         self._split_jitter = split_jitter
+        self._cp_norm = cp_norm
+        self._architecture = architecture
+        self._act = act
+        self._epoch_size = epoch_size
+        self._workers = workers
+        self._voxel_sizes = voxel_sizes
+        self._ssd_exclude = ssd_exclude
+        self._ssd_include = ssd_include
+        self._ssd_labels = ssd_labels
 
     @property
     def normalization(self):
@@ -351,6 +370,42 @@ class ArgsContainer(object):
         return self._split_jitter
 
     @property
+    def cp_norm(self):
+        return self._cp_norm
+
+    @property
+    def architecture(self):
+        return self._architecture
+
+    @property
+    def act(self):
+        return self._act
+
+    @property
+    def epoch_size(self):
+        return self._epoch_size
+
+    @property
+    def workers(self):
+        return self._workers
+
+    @property
+    def voxel_sizes(self):
+        return self._voxel_sizes
+
+    @property
+    def ssd_exclude(self):
+        return self._ssd_exclude
+
+    @property
+    def ssd_include(self):
+        return self._ssd_include
+
+    @property
+    def ssd_labels(self):
+        return self._ssd_labels
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -399,7 +454,16 @@ class ArgsContainer(object):
                      'pl': self._pl,
                      'dropout': self._dropout,
                      'split_on_demand': self._split_on_demand,
-                     'split_jitter': self._split_jitter}
+                     'split_jitter': self._split_jitter,
+                     'cp_norm': self._cp_norm,
+                     'architecture': self._architecture,
+                     'act': self._act,
+                     'epoch_size': self._epoch_size,
+                     'workers': self._workers,
+                     'voxel_sizes': self._voxel_sizes,
+                     'ssd_exclude': self._ssd_exclude,
+                     'ssd_include': self._ssd_include,
+                     'ssd_labels': self._ssd_labels}
         return attr_dict
 
     def save2pkl(self, path: str):
