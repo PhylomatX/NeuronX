@@ -1,7 +1,9 @@
 import os
 import pickle
 from morphx.data.chunkhandler import ChunkHandler
+from morphx.data.torchhandler import TorchHandler
 from morphx.processing import clouds
+from morphx.classes.pointcloud import PointCloud
 import numpy as np
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
@@ -93,19 +95,40 @@ def compare_chunks():
 
 
 def apply_chunkhandler():
-    path = os.path.expanduser('~/thesis/gt/cmn/dnh/test/')
-    chunk_size = 10000
+    path = os.path.expanduser('~/thesis/gt/cmn/ads/train/voxeled/')
+    chunk_size = 5000
     features = {'hc': np.array([1, 0, 0, 0]),
                 'mi': np.array([0, 1, 0, 0]),
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
-    identity = clouds.Compose([clouds.Identity()])
+    identity = clouds.Compose([clouds.Center()])
     ch = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=False,
                       chunk_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=1,
-                      sampling=True, split_on_demand=True, split_jitter=10000)
-    for r in range(15):
-        for ix in range(len(ch)):
-            sample = ch[ix]
+                      sampling=True, split_on_demand=False)
+    import ipdb
+    ipdb.set_trace()
+    # for ix in range(len(ch)):
+    #     sample = ch[ix]
+    #     sample.mark_borders(3000, 10)
+    #     verts_centroid = np.array(sample.vertices)
+    #     centroid = np.mean(sample.vertices, axis=0)
+    #     verts_centroid = np.concatenate((verts_centroid, centroid.reshape((-1, 3))))
+    #     labels_centroid = np.concatenate((sample.labels, np.array(20).reshape(-1, 1)))
+    #     sample = PointCloud(vertices=verts_centroid, labels=labels_centroid)
+    #     sample.save2pkl(save_path + f'{ix}.pkl')
+
+
+def apply_torchhandler():
+    path = os.path.expanduser('~/thesis/gt/cmn/dnh/test/')
+    chunk_size = 5000
+    features = {'hc': np.array([1])}
+    identity = clouds.Compose([clouds.Center()])
+    th = TorchHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=False,
+                      chunk_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=1,
+                      sampling=True, split_on_demand=True, nclasses=4, feat_dim=1, hybrid_mode=True,
+                      exclude_borders=True)
+    for ix in range(len(th)):
+        sample = th[ix]
 
 
 def apply_chunkhandler_ssd():
@@ -134,4 +157,4 @@ def apply_chunkhandler_ssd():
 
 
 if __name__ == '__main__':
-    apply_chunkhandler_ssd()
+    apply_chunkhandler()

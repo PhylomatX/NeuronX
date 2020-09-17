@@ -66,7 +66,9 @@ class ArgsContainer(object):
                  voxel_sizes: Optional[dict] = None,
                  ssd_exclude: List[int] = None,
                  ssd_include: List[int] = None,
-                 ssd_labels: str = None):
+                 ssd_labels: str = None,
+                 exclude_borders: int = 0,
+                 rebalance: dict = None):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -74,7 +76,7 @@ class ArgsContainer(object):
         else:
             self._save_root = None
             self._train_save_path = None
-        if type(train_path) != SuperSegmentationDataset:
+        if type(train_path) != SuperSegmentationDataset and train_path is not None:
             self._train_path = os.path.expanduser(train_path)
         else:
             self._train_path = train_path
@@ -87,17 +89,17 @@ class ArgsContainer(object):
             self._train_transforms = [clouds.Identity()]
         self._input_channels = input_channels
         self._features = features
-        # if self._features is not None:
-        #     for key in self._features.keys():
-        #         if isinstance(self._features[key], dict):
-        #             for item in self._features[key]:
-        #                 if len(self._features[key][item]) != self._input_channels:
-        #                     raise ValueError("Feature dimension doesn't match with number of input channels.")
-        #         elif isinstance(self._features[key], int):
-        #             if self._input_channels != 1:
-        #                 raise ValueError("Feature dimension doesn't match with number of input channels.")
-        #         elif len(self._features[key]) != self._input_channels:
-        #             raise ValueError("Feature dimension doesn't match with number of input channels.")
+        if self._features is not None:
+            for key in self._features.keys():
+                if isinstance(self._features[key], dict):
+                    for item in self._features[key]:
+                        if len(self._features[key][item]) != self._input_channels:
+                            raise ValueError("Feature dimension doesn't match with number of input channels.")
+                elif isinstance(self._features[key], int):
+                    if self._input_channels != 1:
+                        raise ValueError("Feature dimension doesn't match with number of input channels.")
+                elif len(self._features[key]) != self._input_channels:
+                    raise ValueError("Feature dimension doesn't match with number of input channels.")
         self._density_mode = density_mode
         self._chunk_size = chunk_size
         self._tech_density = tech_density
@@ -166,6 +168,8 @@ class ArgsContainer(object):
         self._ssd_exclude = ssd_exclude
         self._ssd_include = ssd_include
         self._ssd_labels = ssd_labels
+        self._exclude_borders = exclude_borders
+        self._rebalance = rebalance
 
     @property
     def normalization(self):
@@ -406,6 +410,14 @@ class ArgsContainer(object):
         return self._ssd_labels
 
     @property
+    def exclude_borders(self):
+        return self._exclude_borders
+
+    @property
+    def rebalance(self):
+        return self._rebalance
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -463,7 +475,9 @@ class ArgsContainer(object):
                      'voxel_sizes': self._voxel_sizes,
                      'ssd_exclude': self._ssd_exclude,
                      'ssd_include': self._ssd_include,
-                     'ssd_labels': self._ssd_labels}
+                     'ssd_labels': self._ssd_labels,
+                     'exclude_borders': self._exclude_borders,
+                     'rebalance': self._rebalance}
         return attr_dict
 
     def save2pkl(self, path: str):

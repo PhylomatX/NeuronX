@@ -305,71 +305,22 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/dnh/2020_08_11_4000_4000_spgt_ds_large/'
+    s_path = '~/thesis/current_work/paper/7_class/2020_08_26_5000_5000/'
     # v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
     v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
     # target_names = ['dendrite', 'neck', 'head']
-    target_names = ['dendrite', 'spine']
-    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
+    # target_names = ['dendrite', 'spine']
+    # target_names = ['shaft', 'other', 'neck', 'head']
+    target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
 
-    # full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=2, batch_num=-1,
-    #                      save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=370,
-    #                      target_names=target_names, redundancy=2)
-
-    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=660,
-                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
-                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
-
-    report_name = 'eval_mv'
-    o_path = s_path + 'eval_valiter1_batchsize-1/'
-    analyse.summarize_reports(o_path, report_name)
-    r_path = o_path + report_name + '.pkl'
-    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-                              filter_identifier=False, neg_identifier=[], time=True)
-
-    s_path = '~/thesis/current_work/paper/dnh/2020_08_11_4000_4000_spgt_ds_no_co/'
-
-    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
+    eval_name = 'eval'
+    full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
                          save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=800,
-                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
-                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
+                         target_names=target_names, redundancy=1)
 
-    report_name = 'eval_mv'
-    o_path = s_path + 'eval_valiter1_batchsize-1/'
+    report_name = eval_name + '_mv'
+    o_path = s_path + eval_name + '_valiter1_batchsize-1/'
     analyse.summarize_reports(o_path, report_name)
     r_path = o_path + report_name + '.pkl'
     analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
                               filter_identifier=False, neg_identifier=[], time=True)
-
-    s_path = '~/thesis/current_work/paper/dnh/2020_08_13_2000_2000_spgt_ds_large_randelastic/'
-
-    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=20, model_max=240,
-                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
-                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
-
-    report_name = 'eval_mv'
-    o_path = s_path + 'eval_valiter1_batchsize-1/'
-    analyse.summarize_reports(o_path, report_name)
-    r_path = o_path + report_name + '.pkl'
-    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-                              filter_identifier=False, neg_identifier=[], time=True)
-
-    s_path = '~/thesis/current_work/paper/dnh/2020_08_13_10000_10000_spgt_ds_large_randelastic/'
-
-    full_evaluation_pipe(s_path, v_path, eval_name=f'eval', pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=480,
-                         target_names=target_names, redundancy=1, label_remove=[1, 2, 3, 4],
-                         label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 1)])
-
-    report_name = 'eval_mv'
-    o_path = s_path + 'eval_valiter1_batchsize-1/'
-    analyse.summarize_reports(o_path, report_name)
-    r_path = o_path + report_name + '.pkl'
-    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-                              filter_identifier=False, neg_identifier=[], time=True)
-
-    # evaluate existing validation again
-    # s_path = '~/thesis/results/param_search_context/run3/eval_valiter5_batchsize-1/'
-    # evaluate_validation_set(s_path, eval_name='eval_mv_f', filters=True, mode='mv')

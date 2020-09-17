@@ -88,18 +88,19 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                 t_loss = 0
                 worst_ix = 0
                 for j in range(batch_size):
-                    if j not in remove:
-                        curr_output = output_np[j][o_mask[j]].reshape(-1, th.num_classes)
-                        curr_target = targets[j][l_mask[j]].astype(int)
-                        loss = criterion(torch.from_numpy(curr_output), torch.from_numpy(curr_target))
-                        if loss > t_loss:
-                            worst_ix = j
-                            t_loss = loss
-                        curr_output = np.argmax(curr_output, axis=1)
-                        target_curr = PointCloud(pts[j], targets[j], features=features[j])
-                        output_curr = PointCloud(pts[j][l_mask[j].astype(bool)], curr_output)
-                        curr = [target_curr, output_curr]
-                        basics.save2pkl(curr, out_path, f'{hc}_i{i}_b{batch}_i{j}')
+                    if np.random.random() < 0.3:
+                        if j not in remove:
+                            curr_output = output_np[j][o_mask[j]].reshape(-1, th.num_classes)
+                            curr_target = targets[j][l_mask[j]].astype(int)
+                            loss = criterion(torch.from_numpy(curr_output), torch.from_numpy(curr_target))
+                            if loss > t_loss:
+                                worst_ix = j
+                                t_loss = loss
+                            curr_output = np.argmax(curr_output, axis=1)
+                            target_curr = PointCloud(pts[j], targets[j], features=features[j])
+                            output_curr = PointCloud(pts[j][l_mask[j].astype(bool)], curr_output)
+                            curr = [target_curr, output_curr]
+                            basics.save2pkl(curr, out_path, f'{hc}_i{i}_b{batch}_i{j}')
                 # worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
                 # target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
                 # output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)
@@ -156,7 +157,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
                        use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
                        kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
-                       dilations=argscont.dilations, reductions=argscont.reductions, first_layer=argscont.first_layer,
+                       reductions=argscont.reductions, first_layer=argscont.first_layer,
                        padding=argscont.padding, nn_center=argscont.nn_center, centroids=argscont.centroids,
                        pl=argscont.pl, normalize=argscont.cp_norm)
     else:
@@ -358,6 +359,8 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
                 if ix > model_max:
                     break
             model_type = f'state_dict_e{ix}.pth'
+            if curr_out_path is not None:
+                curr_out_path += f'epoch_{ix}/'
             validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
                        val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
                        force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,

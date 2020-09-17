@@ -21,6 +21,7 @@ from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
 def training_thread(acont: ArgsContainer):
+    torch.cuda.empty_cache()
     # define other parameters
     lr = 1e-3
     lr_stepsize = 1000
@@ -42,9 +43,9 @@ def training_thread(acont: ArgsContainer):
     if acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=acont.dropout,
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
-                       kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, dilations=acont.dilations,
-                       reductions=acont.reductions, first_layer=acont.first_layer, padding=acont.padding,
-                       nn_center=acont.nn_center, centroids=acont.centroids, pl=acont.pl, normalize=acont.cp_norm)
+                       kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, reductions=acont.reductions,
+                       first_layer=acont.first_layer, padding=acont.padding, nn_center=acont.nn_center,
+                       centroids=acont.centroids, pl=acont.pl, normalize=acont.cp_norm)
     else:
         model = SegAdapt(acont.input_channels, acont.class_num, architecture=acont.architecture,
                          trs=acont.track_running_stats, dropout=acont.dropout, use_bias=acont.use_bias,
@@ -93,7 +94,9 @@ def training_thread(acont: ArgsContainer):
                             voxel_sizes=acont.voxel_sizes,
                             ssd_exclude=acont.ssd_exclude,
                             ssd_include=acont.ssd_include,
-                            ssd_labels=acont.ssd_labels)
+                            ssd_labels=acont.ssd_labels,
+                            exclude_borders=acont.exclude_borders,
+                            rebalance=acont.rebalance)
 
     if acont.use_val:
         val_transforms = clouds.Compose(acont.val_transforms)
@@ -196,8 +199,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 4000
-    chunk_size = 4000
+    sample_num = 12000
+    chunk_size = 12000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -220,18 +223,23 @@ if __name__ == '__main__':
     #                     clouds.Normalization(normalization),
     #                     clouds.Center()]
 
-    features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
+    # features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
 
-    # features = {'hc': np.array([1])}
+    features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/multiview/',
-                             train_path=SuperSegmentationDataset(working_dir="/wholebrain/songbird/j0126/areaxfs_v6/"),
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/ads_cmn/',
+                             train_path='/u/jklimesch/thesis/gt/cmn/ads/train/voxeled/',
                              sample_num=sample_num,
-                             name=name + f'',
-                             class_num=4,
-                             train_transforms=[clouds.Normalization(normalization), clouds.Center()],
+                             name=name + f'_no_co',
+                             class_num=3,
+                             train_transforms=[clouds.RandomVariation((-40, 40)),
+                                               clouds.RandomRotate(apply_flip=True),
+                                               clouds.Center(),
+                                               clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000)),
+                                               clouds.Normalization(normalization),
+                                               clouds.Center()],
                              batch_size=16,
-                             input_channels=4,
+                             input_channels=1,
                              use_val=False,
                              features=features,
                              chunk_size=chunk_size,
@@ -242,8 +250,7 @@ if __name__ == '__main__':
                              hybrid_mode=False,
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=1,
-                             label_mappings=[(3, 2), (4, 3), (5, 1), (6, 1)],
+                             splitting_redundancy=20,
                              norm_type='gn',
                              kernel_size=16,
                              padding=None,
@@ -252,13 +259,48 @@ if __name__ == '__main__':
                              dropout=0,
                              cp_norm=False,
                              use_big=False,
-                             architecture=None,
-                             epoch_size=1000,
-                             workers=5,
-                             ssd_include=[2734465, 2854913, 8003584, 8339462, 10919937, 15933443, 15982592, 16096256,
-                                          16113665, 18556928, 18571264, 23144450, 23400450, 24414208, 26169344,
-                                          26501121, 31967234, 33581058],
-                             ssd_labels='axoness')
+                             split_on_demand=False,
+                             label_mappings=None,
+                             exclude_borders=0,
+                             architecture=[(-1, 1, None, 32), (1, 1, 1024, 32), (1, 2, 256, 16), (2, 2, 32, 8),
+                                           (2, 2, 'd', 8), (4, 1, 'd', 8), (2, 1, 'd', 16), ('drop', 0), ('fcout', 2)],
+                             rebalance={0: 2, 1: 0, 2: 5})
     training_thread(argscont)
 
+    # clouds.Center(),
+    # clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000))
+
+    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/multiview/',
+    #                          train_path=SuperSegmentationDataset(working_dir="/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit"),
+    #                          sample_num=sample_num,
+    #                          name=name + f'_axoness',
+    #                          class_num=5,
+    #                          train_transforms=[clouds.Normalization(normalization), clouds.Center()],
+    #                          batch_size=16,
+    #                          input_channels=4,
+    #                          use_val=False,
+    #                          features=features,
+    #                          chunk_size=chunk_size,
+    #                          tech_density=100,
+    #                          bio_density=bio_density,
+    #                          density_mode=density_mode,
+    #                          max_step_size=10000000,
+    #                          hybrid_mode=False,
+    #                          scheduler='steplr',
+    #                          optimizer='adam',
+    #                          splitting_redundancy=1,
+    #                          norm_type='gn',
+    #                          kernel_size=16,
+    #                          padding=None,
+    #                          centroids=False,
+    #                          pl=64,
+    #                          dropout=0,
+    #                          cp_norm=False,
+    #                          use_big=False,
+    #                          architecture=None,
+    #                          epoch_size=10000,
+    #                          workers=5,
+    #                          ssd_exclude=[491527, 12179464, 18251791, 22335491, 46319619],
+    #                          ssd_labels='axoness')
+    # training_thread(argscont)
 
