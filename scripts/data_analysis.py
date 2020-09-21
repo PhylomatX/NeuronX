@@ -1,7 +1,7 @@
 import os
 import pickle
-from morphx.data.chunkhandler import ChunkHandler
-from morphx.data.torchhandler import TorchHandler
+from neuronx.classes.chunkhandler import ChunkHandler
+from neuronx.classes.torchhandler import TorchHandler
 from morphx.processing import clouds
 from morphx.classes.pointcloud import PointCloud
 import numpy as np

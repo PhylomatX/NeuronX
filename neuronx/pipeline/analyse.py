@@ -1,7 +1,7 @@
 import os
 import re
 import numpy as np
-from morphx.data import basics
+from morphx.processing import basics
 import matplotlib.pyplot as plt
 from typing import List
 from neuronx.classes.datacontainer import DataContainer

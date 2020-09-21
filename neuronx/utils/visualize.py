@@ -15,8 +15,7 @@ import open3d as o3d
 import numpy as np
 from typing import Union
 from getkey import getkey
-from morphx.data import basics
-from morphx.processing import clouds, objects
+from morphx.processing import clouds, objects, basics
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.classes.pointcloud import PointCloud
 from morphx.classes.cloudensemble import CloudEnsemble

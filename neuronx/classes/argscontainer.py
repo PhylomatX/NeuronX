@@ -1,10 +1,8 @@
 import os
 import numpy as np
 import pickle
-import torch
 from typing import List, Tuple, Union, Optional
-from morphx.data import basics
-from morphx.processing import clouds
+from morphx.processing import clouds, basics
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 

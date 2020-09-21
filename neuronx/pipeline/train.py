@@ -1,5 +1,4 @@
 # do not remove open3d as import order of open3d and torch is important ###
-import open3d as o3d
 import torch
 import random
 import warnings
@@ -7,9 +6,7 @@ import numpy as np
 from torch import nn
 from datetime import date
 import morphx.processing.clouds as clouds
-from morphx.data.torchhandler import TorchHandler
-from morphx.postprocessing.mapping import PredictionMapper
-from syconn import global_params
+from neuronx.classes.torchhandler import TorchHandler
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
@@ -17,7 +14,6 @@ from elektronn3.models.convpoint import SegAdapt, SegBig
 from elektronn3.training import Trainer3d, Backup
 from neuronx.classes.argscontainer import ArgsContainer
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
-from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
 def training_thread(acont: ArgsContainer):

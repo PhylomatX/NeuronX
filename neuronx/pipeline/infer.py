@@ -8,10 +8,9 @@ import random
 import numpy as np
 from tqdm import tqdm
 from torch import nn
-from morphx.data import basics
 from typing import List, Tuple
-from morphx.processing import clouds
-from morphx.data.torchhandler import TorchHandler
+from morphx.processing import clouds, basics
+from neuronx.classes.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegAdapt, SegBig

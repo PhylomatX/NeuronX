@@ -2,15 +2,12 @@ import os
 import re
 import glob
 import pickle
-import numpy as np
 import matplotlib as mpl
 from tqdm import tqdm
-from morphx.data import basics
+from morphx.processing import basics
 from syconn import global_params
-from morphx.processing import clouds
 from matplotlib import pyplot as plt
-from morphx.processing import ensembles
-from morphx.data.chunkhandler import ChunkHandler
+from neuronx.classes.chunkhandler import ChunkHandler
 from syconn.reps.super_segmentation import SuperSegmentationObject
 
 

@@ -6,14 +6,12 @@
 # Authors: Jonathan Klimesch
 
 # Import order for open3d and torch is important
-import open3d as o3d
 import torch
-import time
 import numpy as np
 from typing import Union, Tuple, List, Optional
 from torch.utils import data
 from morphx.processing import clouds
-from morphx.data.chunkhandler import ChunkHandler
+from neuronx.classes.chunkhandler import ChunkHandler
 from morphx.classes.pointcloud import PointCloud
 
 

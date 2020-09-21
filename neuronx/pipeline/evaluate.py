@@ -4,10 +4,8 @@ import time
 import numpy as np
 import sklearn.metrics as sm
 from tqdm import tqdm
-import open3d as o3d
-from morphx.processing import objects
-from morphx.data import basics
-from typing import List, Tuple, Dict, Union
+from morphx.processing import objects, basics
+from typing import List, Tuple, Union
 from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.pipeline import infer, analyse
 from morphx.classes.cloudensemble import CloudEnsemble

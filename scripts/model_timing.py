@@ -9,10 +9,9 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 from math import ceil
 import numpy as np
-from morphx.data import basics
-from morphx.processing import ensembles, objects, clouds
+from morphx.processing import ensembles, objects, clouds, basics
 from elektronn3.models.convpoint import SegBig
-from morphx.data.torchhandler import TorchHandler
+from neuronx.classes.torchhandler import TorchHandler
 
 @torch.no_grad()
 def time_convpoint_points(out_path: str, input_channels: int = 4, nclasses: int = 3):
