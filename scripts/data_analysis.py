@@ -94,8 +94,8 @@ def compare_chunks():
             # f.close()
 
 
-def apply_chunkhandler():
-    path = os.path.expanduser('~/thesis/gt/cmn/ads/train/voxeled/')
+def apply_chunkhandler(save_path: str):
+    path = os.path.expanduser('~/thesis/gt/cmn/dnh/test/')
     chunk_size = 5000
     features = {'hc': np.array([1, 0, 0, 0]),
                 'mi': np.array([0, 1, 0, 0]),
@@ -105,17 +105,15 @@ def apply_chunkhandler():
     ch = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=False,
                       chunk_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=1,
                       sampling=True, split_on_demand=False)
-    import ipdb
-    ipdb.set_trace()
-    # for ix in range(len(ch)):
-    #     sample = ch[ix]
-    #     sample.mark_borders(3000, 10)
-    #     verts_centroid = np.array(sample.vertices)
-    #     centroid = np.mean(sample.vertices, axis=0)
-    #     verts_centroid = np.concatenate((verts_centroid, centroid.reshape((-1, 3))))
-    #     labels_centroid = np.concatenate((sample.labels, np.array(20).reshape(-1, 1)))
-    #     sample = PointCloud(vertices=verts_centroid, labels=labels_centroid)
-    #     sample.save2pkl(save_path + f'{ix}.pkl')
+    for ix in range(len(ch)):
+        sample = ch[ix]
+        sample.mark_borders(10)
+        verts_centroid = np.array(sample.vertices)
+        centroid = np.mean(sample.vertices, axis=0)
+        verts_centroid = np.concatenate((verts_centroid, centroid.reshape((-1, 3))))
+        labels_centroid = np.concatenate((sample.labels, np.array(20).reshape(-1, 1)))
+        sample = PointCloud(vertices=verts_centroid, labels=labels_centroid)
+        sample.save2pkl(save_path + f'{ix}.pkl')
 
 
 def apply_torchhandler():
@@ -157,4 +155,4 @@ def apply_chunkhandler_ssd():
 
 
 if __name__ == '__main__':
-    apply_chunkhandler()
+    apply_chunkhandler(os.path.expanduser('~/thesis/tmp/tests/'))

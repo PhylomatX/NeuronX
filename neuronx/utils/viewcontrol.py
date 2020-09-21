@@ -3,8 +3,7 @@ import glob
 import pickle
 import numpy as np
 from getkey import keys, getkey
-from morphx.data import basics
-from morphx.processing import clouds, ensembles
+from morphx.processing import clouds, ensembles, basics
 from neuronx.utils import visualize
 from morphx.classes.pointcloud import PointCloud
 

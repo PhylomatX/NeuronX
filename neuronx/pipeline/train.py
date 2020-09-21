@@ -199,8 +199,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 12000
-    chunk_size = 12000
+    sample_num = 4000
+    chunk_size = 4000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -227,15 +227,16 @@ if __name__ == '__main__':
 
     features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/ads_cmn/',
-                             train_path='/u/jklimesch/thesis/gt/cmn/ads/train/voxeled/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
+                             train_path='/u/jklimesch/thesis/gt/cmn/dnh/sparse/',
                              sample_num=sample_num,
-                             name=name + f'_no_co',
+                             name=name + f'_sparse',
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-40, 40)),
                                                clouds.RandomRotate(apply_flip=True),
                                                clouds.Center(),
-                                               clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000)),
+                                               clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
+                                               clouds.RandomScale(distr_scale=0.1, distr='uniform'),
                                                clouds.Normalization(normalization),
                                                clouds.Center()],
                              batch_size=16,
@@ -247,10 +248,10 @@ if __name__ == '__main__':
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
-                             hybrid_mode=False,
+                             hybrid_mode=True,
                              scheduler='steplr',
                              optimizer='adam',
-                             splitting_redundancy=20,
+                             splitting_redundancy=5,
                              norm_type='gn',
                              kernel_size=16,
                              padding=None,
@@ -259,12 +260,12 @@ if __name__ == '__main__':
                              dropout=0,
                              cp_norm=False,
                              use_big=False,
-                             split_on_demand=False,
-                             label_mappings=None,
+                             split_on_demand=True,
+                             label_remove=[2],
+                             label_mappings=[(2, 0), (5, 1), (6, 2)],
                              exclude_borders=0,
                              architecture=[(-1, 1, None, 32), (1, 1, 1024, 32), (1, 2, 256, 16), (2, 2, 32, 8),
-                                           (2, 2, 'd', 8), (4, 1, 'd', 8), (2, 1, 'd', 16), ('drop', 0), ('fcout', 2)],
-                             rebalance={0: 2, 1: 0, 2: 5})
+                                           (2, 2, 'd', 8), (4, 1, 'd', 8), (2, 1, 'd', 16), ('drop', 0), ('fcout', 2)])
     training_thread(argscont)
 
     # clouds.Center(),

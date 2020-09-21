@@ -305,17 +305,18 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/7_class/2020_08_26_5000_5000/'
+    s_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_no_co/'
     # v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
-    v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
+    v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
     # target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'spine']
     # target_names = ['shaft', 'other', 'neck', 'head']
-    target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
+    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
+    target_names = ['dendrite', 'axon', 'soma']
 
-    eval_name = 'eval'
+    eval_name = 'eval_test'
     full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=50, model_max=800,
+                         save_worst_examples=False, val_type='multiple_model', model_freq=20, model_max=100,
                          target_names=target_names, redundancy=1)
 
     report_name = eval_name + '_mv'
