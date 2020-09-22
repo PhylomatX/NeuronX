@@ -6,7 +6,6 @@
 # Authors: Jonathan Klimesch
 
 # Import order for open3d and torch is important
-import open3d as o3d
 import torch
 import numpy as np
 from typing import Union, Tuple, List, Optional
@@ -24,9 +23,6 @@ class TorchHandler(data.Dataset):
                  sample_num: int,
                  nclasses: int,
                  feat_dim: int,
-                 density_mode: bool = True,
-                 bio_density: float = None,
-                 tech_density: int = None,
                  ctx_size: int = None,
                  transform: clouds.Compose = clouds.Compose([clouds.Identity()]),
                  specific: bool = False,
@@ -37,7 +33,6 @@ class TorchHandler(data.Dataset):
                  splitting_redundancy: int = 1,
                  label_remove: List[int] = None,
                  sampling: bool = True,
-                 force_split: bool = False,
                  padding: int = None,
                  split_on_demand: bool = False,
                  split_jitter: int = 0,
@@ -50,12 +45,11 @@ class TorchHandler(data.Dataset):
                  exclude_borders: int = 0,
                  rebalance: dict = None):
         """ Initializes Dataset. """
-        self._ch = ChunkHandler(data_path, sample_num, density_mode=density_mode, bio_density=bio_density,
-                                tech_density=tech_density, ctx_size=ctx_size, transform=transform,
+        self._ch = ChunkHandler(data_path, sample_num, ctx_size=ctx_size, transform=transform,
                                 specific=specific, data_type=data_type, obj_feats=obj_feats,
                                 label_mappings=label_mappings, hybrid_mode=hybrid_mode,
                                 splitting_redundancy=splitting_redundancy, label_remove=label_remove, sampling=sampling,
-                                force_split=force_split, padding=padding, split_on_demand=split_on_demand,
+                                padding=padding, split_on_demand=split_on_demand,
                                 split_jitter=split_jitter, epoch_size=epoch_size, workers=workers,
                                 voxel_sizes=voxel_sizes, ssd_exclude=ssd_exclude, ssd_include=ssd_include,
                                 ssd_labels=ssd_labels, rebalance=rebalance, exclude_borders=exclude_borders)

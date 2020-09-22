@@ -1,4 +1,5 @@
 # do not remove open3d as import order of open3d and torch is important ###
+import open3d as o3d
 import torch
 import random
 import warnings
@@ -72,7 +73,7 @@ def training_thread(acont: ArgsContainer):
                             nclasses=acont.class_num,
                             feat_dim=acont.input_channels,
                             density_mode=acont.density_mode,
-                            chunk_size=acont.chunk_size,
+                            ctx_size=acont.chunk_size,
                             bio_density=acont.bio_density,
                             tech_density=acont.tech_density,
                             transform=train_transforms,
@@ -98,7 +99,7 @@ def training_thread(acont: ArgsContainer):
         val_transforms = clouds.Compose(acont.val_transforms)
         val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
                               density_mode=acont.density_mode,
-                              chunk_size=acont.chunk_size,
+                              ctx_size=acont.chunk_size,
                               bio_density=acont.bio_density,
                               tech_density=acont.tech_density,
                               transform=val_transforms,
@@ -195,8 +196,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 4000
-    chunk_size = 4000
+    sample_num = 8000
+    chunk_size = 8000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -224,7 +225,7 @@ if __name__ == '__main__':
     features = {'hc': np.array([1])}
 
     argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
-                             train_path='/u/jklimesch/thesis/gt/cmn/dnh/sparse/',
+                             train_path='/u/jklimesch/thesis/gt/cmn/dnh/voxeled/',
                              sample_num=sample_num,
                              name=name + f'_sparse',
                              class_num=3,
@@ -260,8 +261,7 @@ if __name__ == '__main__':
                              label_remove=[2],
                              label_mappings=[(2, 0), (5, 1), (6, 2)],
                              exclude_borders=0,
-                             architecture=[(-1, 1, None, 32), (1, 1, 1024, 32), (1, 2, 256, 16), (2, 2, 32, 8),
-                                           (2, 2, 'd', 8), (4, 1, 'd', 8), (2, 1, 'd', 16), ('drop', 0), ('fcout', 2)])
+                             architecture=None)
     training_thread(argscont)
 
     # clouds.Center(),

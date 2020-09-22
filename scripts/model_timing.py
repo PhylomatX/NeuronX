@@ -200,7 +200,7 @@ def time_dataloader(data_path: str, sample_num: int = 28000, class_num: int = 7,
     transforms = clouds.Compose(transforms)
     ds = TorchHandler(data_path, sample_num, class_num,
                       density_mode=density_mode,
-                      chunk_size=chunk_size,
+                      ctx_size=chunk_size,
                       bio_density=bio_density,
                       tech_density=1500,
                       transform=transforms,

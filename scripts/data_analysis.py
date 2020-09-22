@@ -20,10 +20,10 @@ def produce_chunks():
     path = os.path.expanduser('~/thesis/gt/cmn/dnh/voxeled/')
     save_path = f'{path}examples/'
     ch = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=True,
-                      chunk_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=2,
+                      ctx_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=2,
                       label_mappings=[(5, 3), (6, 4)], label_remove=None, sampling=True, verbose=True)
     ch_transform = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=True,
-                                chunk_size=chunk_size, obj_feats=features, transform=center, splitting_redundancy=2,
+                                ctx_size=chunk_size, obj_feats=features, transform=center, splitting_redundancy=2,
                                 label_mappings=[(5, 3), (6, 4)], label_remove=None, sampling=True, verbose=True)
     vert_nums = []
     counter = 0
@@ -72,10 +72,10 @@ def compare_chunks():
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
     transforms1 = clouds.Compose([clouds.Center(), clouds.RandomScale(distr_scale=0.6, distr='uniform')])
-    ch1 = ChunkHandler(path, sample_num=4000, density_mode=False, specific=True, chunk_size=4000,
+    ch1 = ChunkHandler(path, sample_num=4000, density_mode=False, specific=True, ctx_size=4000,
                        obj_feats=features, transform=transforms1)
     transforms2 = clouds.Compose([clouds.Center()])
-    ch2 = ChunkHandler(path, sample_num=4000, density_mode=False, specific=True, chunk_size=4000,
+    ch2 = ChunkHandler(path, sample_num=4000, density_mode=False, specific=True, ctx_size=4000,
                        obj_feats=features, transform=transforms2)
     save_path = path+'scale/'
     if not os.path.exists(save_path):
@@ -102,9 +102,8 @@ def apply_chunkhandler(save_path: str):
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
     identity = clouds.Compose([clouds.Center()])
-    ch = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=False,
-                      chunk_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=1,
-                      sampling=True, split_on_demand=False)
+    ch = ChunkHandler(path, sample_num=5000, specific=False, ctx_size=chunk_size, obj_feats=features,
+                      transform=identity, splitting_redundancy=1, sampling=True, split_on_demand=False)
     for ix in range(len(ch)):
         sample = ch[ix]
         sample.mark_borders(10)
@@ -122,7 +121,7 @@ def apply_torchhandler():
     features = {'hc': np.array([1])}
     identity = clouds.Compose([clouds.Center()])
     th = TorchHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=False,
-                      chunk_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=1,
+                      ctx_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=1,
                       sampling=True, split_on_demand=True, nclasses=4, feat_dim=1, hybrid_mode=True,
                       exclude_borders=True)
     for ix in range(len(th)):
@@ -136,7 +135,7 @@ def apply_chunkhandler_ssd():
     features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
     transform = clouds.Compose([clouds.Center()])
 
-    ch = ChunkHandler(data=data, sample_num=4000, density_mode=False, specific=False, chunk_size=chunk_size,
+    ch = ChunkHandler(data=data, sample_num=4000, density_mode=False, specific=False, ctx_size=chunk_size,
                       obj_feats=features, splitting_redundancy=1, sampling=True,
                       transform=transform, ssd_include=ssd_include, ssd_labels='axoness',
                       label_mappings=[(3, 2), (4, 3), (5, 1), (6, 1)])

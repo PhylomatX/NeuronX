@@ -132,7 +132,8 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
 def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_path: str,
                model_type: str = 'state_dict.pth', val_iter: int = 1, batch_num: int = -1,
                cloud_out_path: str = None, redundancy: int = -1, force_split: bool = False, same_seeds: bool = False,
-               label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None):
+               label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
+               border_exclusion: int = 0):
     training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
@@ -195,11 +196,11 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
     th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
-                      specific=True, obj_feats=argscont.features, chunk_size=argscont.chunk_size,
+                      specific=True, obj_feats=argscont.features, ctx_size=argscont.chunk_size,
                       label_mappings=label_mappings, hybrid_mode=argscont.hybrid_mode,
                       feat_dim=argscont.input_channels, splitting_redundancy=redundancy,
                       label_remove=label_remove, sampling=argscont.sampling,
-                      force_split=force_split, padding=argscont.padding)
+                      force_split=force_split, padding=argscont.padding, exclude_borders=border_exclusion)
     pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=label_remove, hybrid_mode=argscont.hybrid_mode)
 
     if batch_num == -1:
@@ -315,7 +316,7 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
                                   val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None,
                                   specific_model: int = None, redundancy: int = -1, force_split: bool = False,
                                   model_max: int = None, label_mappings: List[Tuple[int, int]] = None,
-                                  label_remove: List[int] = None, same_seeds: bool = False):
+                                  label_remove: List[int] = None, same_seeds: bool = False, border_exclusion: int = 0):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -363,11 +364,11 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
             validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
                        val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
                        force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
-                       same_seeds=same_seeds)
+                       same_seeds=same_seeds, border_exclusion=border_exclusion)
     else:
         model_type = f'state_dict_e{specific_model}.pth'
         validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
                    val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
                    force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
-                   same_seeds=same_seeds)
+                   same_seeds=same_seeds, border_exclusion=border_exclusion)
 
