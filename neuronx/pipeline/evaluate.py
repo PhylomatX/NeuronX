@@ -148,8 +148,6 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, 
         cm = sm.confusion_matrix(total_labels['gt'], total_labels['pred'])
         total_report_txt += write_confusion_matrix(cm, targets) + '\n\n'
         mode += '_skel'
-        if filters:
-            mode += '_f'
         targets = get_target_names(total_labels['gt_node'], total_labels['pred_node'], targets)
         total_report[mode] = \
             sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
@@ -229,8 +227,8 @@ def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: lis
     mode += '_skel'
     if filters:
         # apply smoothing filters
-        hc.clean_node_labels(neighbor_num=10)
-        mode += '_f'
+        print("Applying sliding window filter to node predictions")
+        hc.node_sliding_window_bfs(neighbor_num=20)
     # remove unpredicted labels
     gtnl, hcnl = handle_unpreds(hc.node_labels, hc.pred_node_labels, drop_unpreds)
     map2skel_timing = time.time() - start
@@ -303,36 +301,43 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/dnh/2020_09_16_7000_7000_donh_borders/'
-    # v_path = '/u/jklimesch/thesis/gt/20_06_09/voxeled/evaluation/'
-    v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
-    # v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
+    # s_path = '~/thesis/current_work/paper/dnh/2020_09_22_8000_8000_sparse/'
+    s_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_big/'
+    # v_path = '/u/jklimesch/thesis/gt/20_09_27/voxeled/test/'
+    # v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
+    v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
     # target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'spine']
-    target_names = ['shaft', 'other', 'neck', 'head']
+    # target_names = ['shaft', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     # target_names = ['dendrite', 'neck', 'head']
-    # target_names = ['dendrite', 'axon', 'soma']
+    target_names = ['dendrite', 'axon', 'soma']
 
-    # eval_name = 'eval_250_borders'
+    # eval_name = 'eval_border2000'
     # full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
-    #                      save_worst_examples=True, val_type='multiple_model', specific_model=250,
-    #                      target_names=target_names, redundancy=10, label_remove=[1, 2, 3, 4],
+    #                      save_worst_examples=False, val_type='multiple_model', model_freq=30, model_max=360,
+    #                      target_names=target_names, redundancy=10, label_remove=[1, 2, 3, 4], force_split=False,
     #                      label_mappings=[(1, 0), (2, 0), (3, 0), (4, 0), (5, 1), (6, 2)], border_exclusion=2000)
 
-    # eval_name = 'eval_150'
+    # eval_name = 'eval_20_09_27_test_filters_10000_e210'
     # full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
-    #                      save_worst_examples=True, val_type='multiple_model', specific_model=150,
-    #                      target_names=target_names, redundancy=1, border_exclusion=2000)
+    #                      save_worst_examples=True, val_type='multiple_model', specific_model=210,
+    #                      target_names=target_names, redundancy=1, border_exclusion=0, force_split=False,
+    #                      filters=True, label_remove=[-2], label_mappings=[(-2, 1), (3, 1), (4, 1), (5, 0), (6, 0)])
 
-    eval_name = 'eval'
-    full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', model_freq=30, model_max=150,
-                         target_names=target_names, redundancy=1, border_exclusion=2000, force_split=False,
-                         label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)])
+    # eval_name = 'eval'
+    # full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
+    #                      save_worst_examples=False, val_type='multiple_model', model_freq=30, model_max=150,
+    #                      target_names=target_names, redundancy=1, border_exclusion=0, force_split=False,
+    #                      label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)])
+
+    eval_name = 'eval_150_red5'
+    full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=2, batch_num=-1,
+                         save_worst_examples=False, val_type='multiple_model', specific_model=150,
+                         target_names=target_names, redundancy=5, border_exclusion=0)
 
     report_name = eval_name + '_mv'
-    o_path = s_path + eval_name + '_valiter1_batchsize-1/'
+    o_path = s_path + eval_name + '_valiter2_batchsize-1/'
     analyse.summarize_reports(o_path, report_name)
     r_path = o_path + report_name + '.pkl'
     analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',

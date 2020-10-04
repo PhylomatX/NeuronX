@@ -5,6 +5,7 @@ from neuronx.classes.torchhandler import TorchHandler
 from morphx.processing import clouds
 from morphx.classes.pointcloud import PointCloud
 import numpy as np
+from morphx.processing import basics
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
@@ -95,24 +96,30 @@ def compare_chunks():
 
 
 def apply_chunkhandler(save_path: str):
-    path = os.path.expanduser('~/thesis/gt/cmn/dnh/test/')
-    chunk_size = 5000
+    path = os.path.expanduser('~/thesis/gt/20_09_27/voxeled/test/')
+    chunk_size = 12000
     features = {'hc': np.array([1, 0, 0, 0]),
                 'mi': np.array([0, 1, 0, 0]),
                 'vc': np.array([0, 0, 1, 0]),
                 'sy': np.array([0, 0, 0, 1])}
     identity = clouds.Compose([clouds.Center()])
-    ch = ChunkHandler(path, sample_num=5000, specific=False, ctx_size=chunk_size, obj_feats=features,
-                      transform=identity, splitting_redundancy=1, sampling=True, split_on_demand=False)
-    for ix in range(len(ch)):
-        sample = ch[ix]
-        sample.mark_borders(10)
-        verts_centroid = np.array(sample.vertices)
-        centroid = np.mean(sample.vertices, axis=0)
-        verts_centroid = np.concatenate((verts_centroid, centroid.reshape((-1, 3))))
-        labels_centroid = np.concatenate((sample.labels, np.array(20).reshape(-1, 1)))
-        sample = PointCloud(vertices=verts_centroid, labels=labels_centroid)
-        sample.save2pkl(save_path + f'{ix}.pkl')
+    ch = ChunkHandler(path, sample_num=10000, density_mode=False, specific=False, ctx_size=chunk_size, obj_feats=features,
+                      transform=identity, splitting_redundancy=1, sampling=True, split_on_demand=False, label_remove=[-2])
+    info = ch.get_set_info()
+    print(info['node_labels'])
+    print(info['labels'])
+    import ipdb
+    ipdb.set_trace()
+    # for ix in range(0, len(ch), 2):
+    #     print(ix)
+    #     sample1 = ch[ix]
+    #     sample2 = ch[ix+1]
+        # sample.mark_borders(10)
+        # verts_centroid = np.array(sample.vertices)
+        # centroid = np.mean(sample.vertices, axis=0)
+        # verts_centroid = np.concatenate((verts_centroid, centroid.reshape((-1, 3))))
+        # labels_centroid = np.concatenate((sample.labels, np.array(20).reshape(-1, 1)))
+        # sample = PointCloud(vertices=verts_centroid, labels=labels_centroid)
 
 
 def apply_torchhandler():
@@ -154,4 +161,4 @@ def apply_chunkhandler_ssd():
 
 
 if __name__ == '__main__':
-    apply_chunkhandler(os.path.expanduser('~/thesis/tmp/tests/'))
+    apply_chunkhandler(os.path.expanduser('~/thesis/gt/new_GT/chunks/'))

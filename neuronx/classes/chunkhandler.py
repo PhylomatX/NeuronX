@@ -513,20 +513,22 @@ class ChunkHandler:
             obj = self._adapt_obj(objects.load_obj(self._data_type, self._data + name + '.pkl'))
         attr_dict = {'vertex_num': len(obj.vertices), 'node_num': len(obj.nodes),
                      'types': list(np.unique(obj.types, return_counts=True)),
-                     'labels': list(np.unique(obj.labels, return_counts=True)), 'length': self.get_obj_length(name)}
+                     'labels': list(np.unique(obj.labels, return_counts=True)), 'length': self.get_obj_length(name),
+                     'node_labels': list(np.unique(obj.node_labels, return_counts=True))}
         return attr_dict
 
     def get_set_info(self):
         """ Returns a dict with information about the specified dataset. """
         total_attr_dict = {'vertex_num': 0, 'node_num': 0, 'types': [np.array([]), np.array([])],
-                           'labels': [np.array([]), np.array([])], 'length': 0}
+                           'labels': [np.array([]), np.array([])], 'node_labels': [np.array([]), np.array([])],
+                           'length': 0}
         for name in self.obj_names:
             attr_dict = self.get_obj_info(name)
             total_attr_dict[name] = attr_dict
             total_attr_dict['vertex_num'] += attr_dict['vertex_num']
             total_attr_dict['node_num'] += attr_dict['node_num']
             total_attr_dict['length'] += attr_dict['length']
-            for key in ['labels', 'types']:
+            for key in ['labels', 'types', 'node_labels']:
                 labels = attr_dict[key]
                 total_labels = total_attr_dict[key]
                 for source_ix, label in enumerate(labels[0]):

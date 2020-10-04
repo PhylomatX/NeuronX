@@ -243,10 +243,61 @@ def generate_diagrams(reports_path: str, output_path: str, identifier: List[str]
                      neg_identifier=neg_identifier)
 
 
+def summarize_checkpoints(reports_path: str, out_path: str, checkpoints: List[int],
+                          classes: List[str] = None, metrics: List[str] = None, precision: int = 2):
+    reports = basics.load_pkl(reports_path)
+    if classes is None:
+        classes = ['dendrite', 'axon', 'soma', 'accuracy', 'macro avg', 'weighted avg']
+    if metrics is None:
+        metrics = ['precision', 'recall', 'f1-score']
+    # gather all metrics in one dict
+    summary = {}
+    for cl in classes:
+        if cl == 'accuracy':
+            summary[cl] = []
+        else:
+            cl_metrics = {}
+            for metric in metrics:
+                cl_metrics[metric] = []
+            summary[cl] = cl_metrics
+    for cp in checkpoints:
+        key = f'epoch_{cp}'
+        report = reports[key]['total']['mv_skel']
+        for cl in classes:
+            if cl == 'accuracy':
+                summary[cl].append(report['accuracy'])
+            else:
+                for metric in metrics:
+                    summary[cl][metric].append(report[cl][metric])
+    # transform arrays into mean and std
+    for cl in classes:
+        if cl == 'accuracy':
+            acc = np.array(summary[cl])
+            summary[cl] = (acc.mean(), acc.std())
+        else:
+            for metric in metrics:
+                met = np.array(summary[cl][metric])
+                summary[cl][metric] = (met.mean(), met.std())
+    # write report with results
+    report = f"{'metric':<20}"
+    for metric in metrics:
+        report += f"{f'{metric}':<20}"
+    for cl in classes:
+        if cl != 'accuracy':
+            report += f"\n{f'{cl}:':<20}"
+            for metric in metrics:
+                report += f"{f'{round(summary[cl][metric][0], precision)} +- {round(summary[cl][metric][1], precision)}':<20}"
+    if 'accuracy' in classes:
+        acc = summary['accuracy']
+        report += f"\n\n{f'accuracy:':<20}{f'{round(acc[0], precision)} +- {round(acc[1], precision)}'}"
+    out_path = os.path.expanduser(out_path)
+    with open(out_path, 'w') as f:
+        f.write(report)
+
+
 if __name__ == '__main__':
-    report_name = 'eval_mv'
-    o_path = '~/thesis/current_work/paper/dnh/2020_07_20_10000_5000_spgt/eval_valiter2_batchsize-1/'
-    summarize_reports(o_path, report_name)
-    r_path = o_path + report_name + '.pkl'
-    generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-                      filter_identifier=False, neg_identifier=[], time=True)
+    base_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_big/' \
+                'eval_test_valiter1_batchsize-1/'
+    eval_path = base_path + 'eval_test_mv.pkl'
+    report_path = base_path + 'checkpoint_summary.txt'
+    summarize_checkpoints(eval_path, report_path, [70, 90, 100, 110, 120, 130, 140, 150, 160, 170], precision=3)

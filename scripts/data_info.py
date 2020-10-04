@@ -8,7 +8,7 @@ from morphx.processing import basics
 from syconn import global_params
 from matplotlib import pyplot as plt
 from neuronx.classes.chunkhandler import ChunkHandler
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 
 
 def get_areas(set_path: str, out_path: str):
@@ -29,11 +29,11 @@ def get_areas(set_path: str, out_path: str):
         f.close()
 
 
-def produce_set_info():
-    ch = ChunkHandler('/u/jklimesch/thesis/gt/20_02_20/poisson_val_my/validation/', sample_num=28000,
-                      density_mode=True, bio_density=50, tech_density=1500, specific=True)
+def produce_set_info(data_path: str, out_path: str):
+    ch = ChunkHandler(data_path, sample_num=28000,
+                      density_mode=False, ctx_size=12000, specific=True)
     info = ch.get_set_info()
-    with open('/u/jklimesch/thesis/results/gt/eval_info.pkl', 'wb') as f:
+    with open(out_path + 'eval_info.pkl', 'wb') as f:
         pickle.dump(info, f)
 
 
@@ -48,16 +48,16 @@ def eval_set_info(info_path: str, out_path: str, name: str):
     tvc_area = 0
     tvc_num = 0
     classes = {0: 'dendrite', 1: 'axon', 2: 'soma', 3: 'bouton', 4: 'terminal', 5: 'neck', 6: 'head'}
-    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    ssd = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/", version='axgt')
     tspecs = {}
     for key in tqdm(info):
         if 'sso' in key:
             specs = {}
             info_txt = ""
             info_txt += '\n\n' + key
-            sso_id = int(re.findall(r"sso_(\d+).", key)[0])
-            sso = SuperSegmentationObject(sso_id)
-
+            sso_id = int(re.findall(r"sso_(\d+)", key)[0])
+            sso = ssd.get_super_segmentation_object(sso_id)
             # calculate cell surface area
             svs = sso.svs
             cell_area = 0
@@ -81,7 +81,7 @@ def eval_set_info(info_path: str, out_path: str, name: str):
             specs['mi_num'] = mi_num
 
             # summarize syns
-            sjs = sso.syn_ssv
+            sjs = sso.sjs
             sj_area = 0
             for obj in sjs:
                 sj_area += obj.mesh_area

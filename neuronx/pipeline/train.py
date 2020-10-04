@@ -196,8 +196,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 8000
-    chunk_size = 8000
+    sample_num = 15000
+    chunk_size = 12000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -207,10 +207,15 @@ if __name__ == '__main__':
     else:
         normalization = chunk_size
 
-    # features = {'hc': np.array([1, 0, 0, 0]),
-    #             'mi': np.array([0, 1, 0, 0]),
-    #             'vc': np.array([0, 0, 1, 0]),
-    #             'sy': np.array([0, 0, 0, 1])}
+    # features = {'hc': {0: np.array([1, 0, 0, 0, 0]), 1: np.array([0, 1, 0, 0, 0])},
+    #             'mi': np.array([0, 0, 1, 0, 0]),
+    #             'vc': np.array([0, 0, 0, 1, 0]),
+    #             'sy': np.array([0, 0, 0, 0, 1])}
+
+    features = {'hc': np.array([1, 0, 0, 0]),
+                'mi': np.array([0, 1, 0, 0]),
+                'vc': np.array([0, 0, 1, 0]),
+                'sy': np.array([0, 0, 0, 1])}
 
     # train_transforms = [clouds.RandomVariation((-40, 40)),
     #                     clouds.RandomRotate(apply_flip=True),
@@ -222,12 +227,12 @@ if __name__ == '__main__':
 
     # features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
 
-    features = {'hc': np.array([1])}
+    # features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
-                             train_path='/u/jklimesch/thesis/gt/cmn/dnh/voxeled/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/ads_thesis/',
+                             train_path='/u/jklimesch/thesis/gt/20_09_27/voxeled/train/',
                              sample_num=sample_num,
-                             name=name + f'_sparse',
+                             name=name + f'',
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-40, 40)),
                                                clouds.RandomRotate(apply_flip=True),
@@ -237,7 +242,7 @@ if __name__ == '__main__':
                                                clouds.Normalization(normalization),
                                                clouds.Center()],
                              batch_size=16,
-                             input_channels=1,
+                             input_channels=4,
                              use_val=False,
                              features=features,
                              chunk_size=chunk_size,
@@ -245,7 +250,7 @@ if __name__ == '__main__':
                              bio_density=bio_density,
                              density_mode=density_mode,
                              max_step_size=10000000,
-                             hybrid_mode=True,
+                             hybrid_mode=False,
                              scheduler='steplr',
                              optimizer='adam',
                              splitting_redundancy=5,
@@ -257,9 +262,9 @@ if __name__ == '__main__':
                              dropout=0,
                              cp_norm=False,
                              use_big=False,
-                             split_on_demand=True,
-                             label_remove=[2],
-                             label_mappings=[(2, 0), (5, 1), (6, 2)],
+                             split_on_demand=False,
+                             label_remove=[-2],
+                             label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
                              exclude_borders=0,
                              architecture=None)
     training_thread(argscont)

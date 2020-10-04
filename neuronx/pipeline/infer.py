@@ -43,6 +43,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
             l_mask = torch.zeros((batch_size, point_num))
             targets = torch.zeros((batch_size, point_num))
             fill_up = 0
+            sample_number = 0
             remove = []
             for j in range(batch_size):
                 # for sampling == False, the batch_size is always 1 as the samples have different sizes.
@@ -55,8 +56,10 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                     # The fill up samples are always build by the first parts of the current cell (thus fill_up = 0)
                     # and will be removed later
                     if torch.all(sample['pts'] == 0):
+                        if sample_number == 0:
+                            sample_number = j
                         sample = th[(hc, fill_up)]
-                        fill_up += 1
+                        fill_up = (fill_up + 1) % sample_number
                         remove.append(j)
                 pts[j] = sample['pts']
                 features[j] = sample['features']
