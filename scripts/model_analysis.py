@@ -2,10 +2,12 @@ import os
 import open3d
 import torch
 import numpy as np
+from typing import List, Tuple
 from morphx.classes.pointcloud import PointCloud
-from morphx.processing import clouds
+from morphx.processing import clouds, basics
 from elektronn3.models.convpoint import SegBig, SegAdapt
 from neuronx.classes.argscontainer import ArgsContainer
+from neuronx.classes.torchhandler import TorchHandler
 
 
 class SaveFeatures:
@@ -23,11 +25,14 @@ class SaveFeatures:
             hook.remove()
 
 
-def analyse_features(m_path: str, args_path: str, out_path: str):
+def analyse_features(m_path: str, args_path: str, out_path: str, val_path: str, context_list: List[Tuple[str, int]],
+                     label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
+                     splitting_redundancy: int = 1, test: bool = False):
     device = torch.device('cuda')
     m_path = os.path.expanduser(m_path)
     out_path = os.path.expanduser(out_path)
     args_path = os.path.expanduser(args_path)
+    val_path = os.path.expanduser(val_path)
 
     # load model specifications
     argscont = ArgsContainer().load_from_pkl(args_path)
@@ -55,50 +60,94 @@ def analyse_features(m_path: str, args_path: str, out_path: str):
     model.to(device)
     model.eval()
 
-    layer_outs = SaveFeatures(list(model.children())[1])
-    act_outs = SaveFeatures([list(model.children())[0]])
-
     pts = torch.rand(1, argscont.sample_num, 3, device=device)
     feats = torch.rand(1, argscont.sample_num, argscont.input_channels, device=device)
-    _ = model(feats, pts)
+    contexts = []
+    th = None
 
-    for ix, layer in enumerate(layer_outs.features):
-        if len(layer) < 2:
-            continue
-        feats = layer[0].detach().cpu().numpy()[0]
-        feats_act = act_outs.features[ix].detach().cpu().numpy()[0]
-        pts = layer[1].detach().cpu().numpy()[0]
-        x_offset = (pts[:, 0].max() - pts[:, 0].min()) * 1.5 * 2
-        y_size = (pts[:, 1].max() - pts[:, 1].min()) * 1.5
-        y_offset = 0
-        row_num = feats.shape[1] / 8
-        total_pc = None
-        total_pc_act = None
-        for i in range(feats.shape[1]):
-            if i % 8 == 0 and i != 0:
-                y_offset += y_size
-            pc = PointCloud(vertices=pts, features=feats[:, i].reshape(-1, 1))
-            pc_act = PointCloud(vertices=pts, features=feats_act[:, i].reshape(-1, 1))
-            pc.move(np.array([(i % 8) * x_offset, y_offset, 0]))
-            pc_act.move(np.array([(i % 8) * x_offset + x_offset / 2.5, y_offset, 0]))
-            pc = clouds.merge_clouds([pc, pc_act])
-            if total_pc is None:
-                total_pc = pc
-                total_pc_act = pc_act
-            else:
-                total_pc = clouds.merge_clouds([total_pc, pc])
-                total_pc_act = clouds.merge_clouds([total_pc_act, pc_act])
-        total_pc.move(np.array([-4 * x_offset - x_offset / 2, -row_num / 2 * y_size - y_size / 2, 0]))
-        total_pc_act.move(np.array([-4 * x_offset - x_offset / 2, -row_num / 2 * y_size - y_size / 2, 0]))
-        total_pc.save2pkl(out_path + f'layer_{ix}.pkl')
-        total_pc_act.save2pkl(out_path + f'layer_{ix}_act.pkl')
+    if not test:
+        # prepare data loader
+        if label_mappings is None:
+            label_mappings = argscont.label_mappings
+        if label_remove is None:
+            label_remove = argscont.label_remove
+        transforms = clouds.Compose(argscont.val_transforms)
+        th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
+                          bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
+                          specific=True, obj_feats=argscont.features, ctx_size=argscont.chunk_size,
+                          label_mappings=label_mappings, hybrid_mode=argscont.hybrid_mode,
+                          feat_dim=argscont.input_channels, splitting_redundancy=splitting_redundancy,
+                          label_remove=label_remove, sampling=argscont.sampling,
+                          force_split=False, padding=argscont.padding, exclude_borders=0)
+        for context in context_list:
+            pts = torch.zeros((1, argscont.sample_num, 3))
+            feats = torch.ones((1, argscont.sample_num, argscont.input_channels))
+            sample = th[context]
+            pts[0] = sample['pts']
+            feats[0] = sample['features']
+            o_mask = sample['o_mask'].numpy().astype(bool)
+            l_mask = sample['l_mask'].numpy().astype(bool)
+            target = sample['target'].numpy()
+            target = target[l_mask].astype(int)
+            contexts.append((feats, pts, o_mask, l_mask, target))
+    else:
+        contexts.append((feats, pts))
+
+    for c_ix, context in enumerate(contexts):
+        # set hooks
+        layer_outs = SaveFeatures(list(model.children())[1])
+        act_outs = SaveFeatures([list(model.children())[0]])
+        feats = context[0].to(device, non_blocking=True)
+        pts = context[1].to(device, non_blocking=True)
+        output = model(feats, pts).cpu().detach().numpy()
+        if not test:
+            output = np.argmax(output[0][context[2]].reshape(-1, th.num_classes), axis=1)
+            pts = context[1][0].numpy()
+            identifier = f'{context_list[c_ix][0]}_{context_list[c_ix][1]}'
+            target = PointCloud(pts, context[4])
+            x_offset = (pts[:, 0].max() - pts[:, 0].min()) * 1.5 * 3
+            pred = PointCloud(pts[context[3]], output)
+            pred.move(np.array([x_offset / 2, 0, 0]))
+            clouds.merge([target, pred]).save2pkl(out_path + identifier + '_0io_r_a.pkl')
+        for ix, layer in enumerate(layer_outs.features):
+            if len(layer) < 2:
+                continue
+            feats = layer[0].detach().cpu().numpy()[0]
+            feats_act = act_outs.features[ix].detach().cpu().numpy()[0]
+            pts = layer[1].detach().cpu().numpy()[0]
+            x_offset = (pts[:, 0].max() - pts[:, 0].min()) * 1.5 * 3
+            x_offset_act = x_offset / 3
+            y_size = (pts[:, 1].max() - pts[:, 1].min()) * 1.5
+            y_offset = 0
+            row_num = feats.shape[1] / 8
+            total_pc = None
+            total_pc_act = None
+            for i in range(feats.shape[1]):
+                if i % 8 == 0 and i != 0:
+                    y_offset += y_size
+                pc = PointCloud(vertices=pts, features=feats[:, i].reshape(-1, 1))
+                pc_act = PointCloud(vertices=pts, features=feats_act[:, i].reshape(-1, 1))
+                pc.move(np.array([(i % 8) * x_offset, y_offset, 0]))
+                pc_act.move(np.array([(i % 8) * x_offset + x_offset / 2.8, y_offset, 0]))
+                pc = clouds.merge_clouds([pc, pc_act])
+                pc_act = PointCloud(vertices=pts, features=feats_act[:, i].reshape(-1, 1))
+                pc_act.move(np.array([(i % 8) * x_offset_act, y_offset, 0]))
+                if total_pc is None:
+                    total_pc = pc
+                    total_pc_act = pc_act
+                else:
+                    total_pc = clouds.merge_clouds([total_pc, pc])
+                    total_pc_act = clouds.merge_clouds([total_pc_act, pc_act])
+            total_pc.move(np.array([-4 * x_offset - x_offset / 2, -row_num / 2 * y_size - y_size / 2, 0]))
+            total_pc_act.move(np.array([-4 * x_offset_act - x_offset_act / 2, -row_num / 2 * y_size - y_size / 2, 0]))
+            total_pc.save2pkl(out_path + f'{context_list[c_ix][0]}_{context_list[c_ix][1]}_l{ix}_r.pkl')
+            total_pc_act.save2pkl(out_path + f'{context_list[c_ix][0]}_{context_list[c_ix][1]}_l{ix}_a.pkl')
 
 
-def analyse_layer(model_path: str, layer: int, filter: int, opt_steps: int, out_path: str):
+def fit_cloud2layer(model_path: str, layer: int, filter: int, opt_steps: int, out_path: str):
     device = torch.device('cuda')
     model_path = os.path.expanduser(model_path)
     out_path = os.path.expanduser(out_path)
-
     # load model specifications
     argscont = ArgsContainer().load_from_pkl(model_path + '/argscont.pkl')
 
@@ -138,6 +187,10 @@ def analyse_layer(model_path: str, layer: int, filter: int, opt_steps: int, out_
 
 
 if __name__ == '__main__':
-    analyse_features('~/thesis/current_work/paper/ads_thesis/2020_09_22_12000_12000_small/models/state_dict_e200.pth',
-                     '~/thesis/current_work/paper/ads_thesis/2020_09_22_12000_12000_small/argscont.pkl',
-                     '~/thesis/current_work/paper/model_analysis/')
+    analyse_features(m_path='~/thesis/current_work/paper/dnh/2020_09_18_4000_4000/models/state_dict_e250.pth',
+                     args_path='~/thesis/current_work/paper/dnh/2020_09_18_4000_4000/argscont.pkl',
+                     out_path='~/thesis/current_work/paper/model_analysis/',
+                     val_path='~/thesis/gt/cmn/dnh/voxeled/evaluation/',
+                     context_list=[('sso_23400450', 1), ('sso_23400450', 10),
+                                   ('sso_23400450', 17), ('sso_24414208', 109)],
+                     label_remove=[1, 2, 3, 4],  label_mappings=[(5, 1), (6, 2)])

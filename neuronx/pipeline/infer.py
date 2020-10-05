@@ -102,7 +102,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                             target_curr = PointCloud(pts[j], targets[j], features=features[j])
                             output_curr = PointCloud(pts[j][l_mask[j].astype(bool)], curr_output)
                             curr = [target_curr, output_curr]
-                            basics.save2pkl(curr, out_path, f'{hc}_i{i}_b{batch}_i{j}')
+                            basics.save2pkl(curr, out_path, f'{hc}_i{i}_idx{batch * batch_size + j}')
                 # worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
                 # target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
                 # output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)

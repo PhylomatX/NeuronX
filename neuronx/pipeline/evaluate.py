@@ -301,17 +301,17 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    # s_path = '~/thesis/current_work/paper/dnh/2020_09_22_8000_8000_sparse/'
-    s_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_big/'
+    s_path = '~/thesis/current_work/paper/dnh/2020_09_22_8000_8000_sparse/'
+    # s_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_big/'
     # v_path = '/u/jklimesch/thesis/gt/20_09_27/voxeled/test/'
-    # v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
-    v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
+    v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
+    # v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
     # target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'spine']
     # target_names = ['shaft', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
-    # target_names = ['dendrite', 'neck', 'head']
-    target_names = ['dendrite', 'axon', 'soma']
+    target_names = ['dendrite', 'neck', 'head']
+    # target_names = ['dendrite', 'axon', 'soma']
 
     # eval_name = 'eval_border2000'
     # full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
@@ -325,21 +325,21 @@ if __name__ == '__main__':
     #                      target_names=target_names, redundancy=1, border_exclusion=0, force_split=False,
     #                      filters=True, label_remove=[-2], label_mappings=[(-2, 1), (3, 1), (4, 1), (5, 0), (6, 0)])
 
-    # eval_name = 'eval'
-    # full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
-    #                      save_worst_examples=False, val_type='multiple_model', model_freq=30, model_max=150,
-    #                      target_names=target_names, redundancy=1, border_exclusion=0, force_split=False,
-    #                      label_mappings=[(2, 1), (3, 1), (4, 1), (5, 2), (6, 3)])
+    eval_name = 'eval_250_analysis'
+    full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=1,
+                         save_worst_examples=True, val_type='multiple_model', specific_model=250,
+                         target_names=target_names, redundancy=1, border_exclusion=0, force_split=False,
+                         label_remove=[1, 2, 3, 4],  label_mappings=[(5, 1), (6, 2)])
 
-    eval_name = 'eval_150_red5'
-    full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=2, batch_num=-1,
-                         save_worst_examples=False, val_type='multiple_model', specific_model=150,
-                         target_names=target_names, redundancy=5, border_exclusion=0)
+    # eval_name = 'eval_150_red5'
+    # full_evaluation_pipe(s_path, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=2, batch_num=-1,
+    #                      save_worst_examples=False, val_type='multiple_model', specific_model=150,
+    #                      target_names=target_names, redundancy=5, border_exclusion=0)
 
-    report_name = eval_name + '_mv'
-    o_path = s_path + eval_name + '_valiter2_batchsize-1/'
-    analyse.summarize_reports(o_path, report_name)
-    r_path = o_path + report_name + '.pkl'
-    analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-                              filter_identifier=False, neg_identifier=[], time=True)
+    # report_name = eval_name + '_mv'
+    # o_path = s_path + eval_name + '_valiter2_batchsize-1/'
+    # analyse.summarize_reports(o_path, report_name)
+    # r_path = o_path + report_name + '.pkl'
+    # analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
+    #                           filter_identifier=False, neg_identifier=[], time=True)
 
