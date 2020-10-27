@@ -15,12 +15,13 @@ from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegAdapt, SegBig
 from neuronx.classes.argscontainer import ArgsContainer
+from lightconvpoint.utils import get_network
 
 
 @torch.no_grad()
 def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
                     device: torch.device, model, pm: PredictionMapper, input_channels: int,
-                    out_path: str = None, sampling: bool = True):
+                    out_path: str = None, sampling: bool = True, lcp_flag: bool = False):
     """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
     chunk_timing = [0, 0]
     model_timing = [0, 0]
@@ -69,6 +70,10 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                 targets[j] = sample['target']
 
             # apply model to batch of samples
+            if lcp_flag:
+                pts = pts.transpose(1, 2)
+                features = features.transpose(1, 2)
+
             pts = pts.to(device, non_blocking=True)
             features = features.to(device, non_blocking=True)
             start = time.time()
@@ -76,9 +81,15 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
             model_timing[0] += time.time() - start
             model_timing[1] += 1
 
-            # convert all tensors to numpy arrays and
+            if lcp_flag:
+                pts = pts.transpose(1, 2)
+                features = features.transpose(1, 2)
+                outputs = outputs.transpose(1, 2)
+
+            # convert all tensors to numpy arrays
             pts = pts.cpu().detach().numpy()
             features = features.cpu().detach().numpy()
+
             l_mask = l_mask.numpy().astype(bool)
             o_mask = o_mask.numpy().astype(bool)
             targets = targets.numpy()
@@ -90,7 +101,7 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                 t_loss = 0
                 worst_ix = 0
                 for j in range(batch_size):
-                    if np.random.random() < 0.3:
+                    if np.random.random() < 1 and '80035' in hc:
                         if j not in remove:
                             curr_output = output_np[j][o_mask[j]].reshape(-1, th.num_classes)
                             curr_target = targets[j][l_mask[j]].astype(int)
@@ -155,8 +166,17 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     else:
         device = torch.device('cpu')
 
+    lcp_flag = False
     # load model
-    if argscont.use_big:
+    if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
+        kwargs = {}
+        if argscont.model == 'ConvAdaptSeg':
+            kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act,
+                          norm=argscont.norm_type)
+        conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
+        model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
+        lcp_flag = True
+    elif argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
                        use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
                        kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
@@ -230,7 +250,8 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         start = time.time()
         chunk_timing, model_timing, map_timing = \
             validate_single(th, obj, batch_size, argscont.sample_num, val_iter, device, model, pm,
-                            argscont.input_channels, out_path=cloud_out_path, sampling=argscont.sampling)
+                            argscont.input_channels, out_path=cloud_out_path, sampling=argscont.sampling,
+                            lcp_flag=lcp_flag)
         total_timing = time.time() - start
         attr_dict['timing'] = total_timing
         attr_dicts[obj] = attr_dict
@@ -316,10 +337,11 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
 
 
 def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
-                                  val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None,
-                                  specific_model: int = None, redundancy: int = -1, force_split: bool = False,
-                                  model_max: int = None, label_mappings: List[Tuple[int, int]] = None,
-                                  label_remove: List[int] = None, same_seeds: bool = False, border_exclusion: int = 0):
+                                  model_min: int = None, val_iter: int = 1, batch_num: int = -1,
+                                  cloud_out_path: str = None, specific_model: int = None, redundancy: int = -1,
+                                  force_split: bool = False, model_max: int = None,
+                                  label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
+                                  same_seeds: bool = False, border_exclusion: int = 0):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -356,11 +378,12 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
     models = glob.glob(model_path + 'state_dict_*')
     models.sort()
     if specific_model is None:
-        model_idcs = np.arange(0, len(models)*model_freq, model_freq)
+        if model_min is None:
+            model_min = 0
+        if model_max is None:
+            model_max = 500
+        model_idcs = np.arange(model_min, model_max, model_freq)
         for ix in model_idcs:
-            if model_max is not None:
-                if ix > model_max:
-                    break
             model_type = f'state_dict_e{ix}.pth'
             if curr_out_path is not None:
                 curr_out_path += f'epoch_{ix}/'

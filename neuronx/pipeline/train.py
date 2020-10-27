@@ -10,11 +10,13 @@ import morphx.processing.clouds as clouds
 from neuronx.classes.torchhandler import TorchHandler
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
+
 elektronn3.select_mpl_backend('Agg')
 from elektronn3.models.convpoint import SegAdapt, SegBig
 from elektronn3.training import Trainer3d, Backup
 from neuronx.classes.argscontainer import ArgsContainer
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
+from lightconvpoint.utils import get_network
 
 
 def training_thread(acont: ArgsContainer):
@@ -36,8 +38,16 @@ def training_thread(acont: ArgsContainer):
     else:
         device = torch.device('cpu')
 
+    lcp_flag = False
     # load model
-    if acont.use_big:
+    if acont.architecture == 'lcp' or acont.model == 'ConvAdaptSeg':
+        kwargs = {}
+        if acont.model == 'ConvAdaptSeg':
+            kwargs = dict(f_map_num=acont.pl, architecture=acont.architecture, act=acont.act, norm=acont.norm_type)
+        conv = dict(layer=acont.conv[0], kernel_separation=acont.conv[1])
+        model = get_network(acont.model, acont.input_channels, acont.class_num, conv, acont.search, **kwargs)
+        lcp_flag = True
+    elif acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=acont.dropout,
                        use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
                        kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, reductions=acont.reductions,
@@ -146,7 +156,7 @@ def training_thread(acont: ArgsContainer):
             if not acont.hybrid_mode:
                 # remove cell organelles
                 idcs = labels.argsort()
-                counts = counts[idcs][:-(len(labels)-acont.class_num)]
+                counts = counts[idcs][:-(len(labels) - acont.class_num)]
             if acont.class_weights == 'mean':
                 weights = counts.mean() / counts
             if acont.class_weights == 'sum':
@@ -171,7 +181,7 @@ def training_thread(acont: ArgsContainer):
         channel_num=acont.input_channels,
         pred_mapper=pm,
         batchsize=batch_size,
-        num_workers=min(max(0, acont.batch_size-2), 5),
+        num_workers=min(max(0, acont.batch_size - 2), 5),
         save_root=acont.save_root,
         exp_name=acont.name,
         num_classes=acont.class_num,
@@ -179,7 +189,8 @@ def training_thread(acont: ArgsContainer):
         example_input=(example_feats, example_pts),
         enable_save_trace=jit,
         collate_fn=None,
-        batch_avg=acont.batch_avg
+        batch_avg=acont.batch_avg,
+        lcp_flag=lcp_flag
     )
     # Archiving training script, src folder, env info
     Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
@@ -196,8 +207,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 15000
-    chunk_size = 12000
+    sample_num = 8192
+    chunk_size = 8000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -229,19 +240,18 @@ if __name__ == '__main__':
 
     # features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/ads_thesis/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
                              train_path='/u/jklimesch/thesis/gt/20_09_27/voxeled/train/',
                              sample_num=sample_num,
-                             name=name + f'',
-                             class_num=3,
+                             name=name + f'_7class_cp_cp_fps',
+                             class_num=7,
                              train_transforms=[clouds.RandomVariation((-40, 40)),
                                                clouds.RandomRotate(apply_flip=True),
                                                clouds.Center(),
                                                clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
                                                clouds.RandomScale(distr_scale=0.1, distr='uniform'),
-                                               clouds.Normalization(normalization),
                                                clouds.Center()],
-                             batch_size=16,
+                             batch_size=8,
                              input_channels=4,
                              use_val=False,
                              features=features,
@@ -263,46 +273,41 @@ if __name__ == '__main__':
                              cp_norm=False,
                              use_big=False,
                              split_on_demand=False,
-                             label_remove=[-2],
-                             label_mappings=[(3, 1), (4, 1), (5, 0), (6, 0)],
                              exclude_borders=0,
-                             architecture=None)
+                             act=nn.ReLU,
+                             label_remove=[-2],
+                             architecture=[dict(ic=-1, oc=1, ks=16, nn=32, np=-1),
+                                           dict(ic=1, oc=1, ks=16, nn=32, np=2048),
+                                           dict(ic=1, oc=1, ks=16, nn=32, np=1024),
+                                           dict(ic=1, oc=1, ks=16, nn=32, np=256),
+                                           dict(ic=1, oc=2, ks=16, nn=32, np=64),
+                                           dict(ic=2, oc=2, ks=16, nn=16, np=16),
+                                           dict(ic=2, oc=2, ks=16, nn=8, np=8),
+                                           dict(ic=2, oc=2, ks=16, nn=4, np='d'),
+                                           dict(ic=4, oc=2, ks=16, nn=4, np='d'),
+                                           dict(ic=4, oc=1, ks=16, nn=8, np='d'),
+                                           dict(ic=2, oc=1, ks=16, nn=16, np='d'),
+                                           dict(ic=2, oc=1, ks=16, nn=16, np='d'),
+                                           dict(ic=2, oc=1, ks=16, nn=16, np='d')],
+                             model='ConvAdaptSeg',
+                             conv=('ConvPoint', False),
+                             search='SearchFPS')
     training_thread(argscont)
 
     # clouds.Center(),
     # clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000))
 
-    # argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/multiview/',
-    #                          train_path=SuperSegmentationDataset(working_dir="/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit"),
-    #                          sample_num=sample_num,
-    #                          name=name + f'_axoness',
-    #                          class_num=5,
-    #                          train_transforms=[clouds.Normalization(normalization), clouds.Center()],
-    #                          batch_size=16,
-    #                          input_channels=4,
-    #                          use_val=False,
-    #                          features=features,
-    #                          chunk_size=chunk_size,
-    #                          tech_density=100,
-    #                          bio_density=bio_density,
-    #                          density_mode=density_mode,
-    #                          max_step_size=10000000,
-    #                          hybrid_mode=False,
-    #                          scheduler='steplr',
-    #                          optimizer='adam',
-    #                          splitting_redundancy=1,
-    #                          norm_type='gn',
-    #                          kernel_size=16,
-    #                          padding=None,
-    #                          centroids=False,
-    #                          pl=64,
-    #                          dropout=0,
-    #                          cp_norm=False,
-    #                          use_big=False,
-    #                          architecture=None,
-    #                          epoch_size=10000,
-    #                          workers=5,
-    #                          ssd_exclude=[491527, 12179464, 18251791, 22335491, 46319619],
-    #                          ssd_labels='axoness')
-    # training_thread(argscont)
 
+# [dict(ic=-1, oc=1, ks=16, nn=32, np=-1),
+#                                            dict(ic=1, oc=1, ks=16, nn=32, np=2048),
+#                                            dict(ic=1, oc=1, ks=16, nn=32, np=1024),
+#                                            dict(ic=1, oc=1, ks=16, nn=32, np=256),
+#                                            dict(ic=1, oc=2, ks=16, nn=32, np=64),
+#                                            dict(ic=2, oc=2, ks=16, nn=16, np=16),
+#                                            dict(ic=2, oc=2, ks=16, nn=8, np=8),
+#                                            dict(ic=2, oc=2, ks=16, nn=4, np='d'),
+#                                            dict(ic=4, oc=2, ks=16, nn=4, np='d'),
+#                                            dict(ic=4, oc=1, ks=16, nn=8, np='d'),
+#                                            dict(ic=2, oc=1, ks=16, nn=16, np='d'),
+#                                            dict(ic=2, oc=1, ks=16, nn=16, np='d'),
+#                                            dict(ic=2, oc=1, ks=16, nn=16, np='d')],

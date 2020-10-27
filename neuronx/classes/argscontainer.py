@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import pickle
-from typing import List, Tuple, Union, Optional
+import torch.nn as nn
+from typing import List, Tuple, Union, Optional, Dict, Any
 from morphx.processing import clouds, basics
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
@@ -57,8 +58,8 @@ class ArgsContainer(object):
                  split_on_demand: bool = False,
                  split_jitter: int = 0,
                  cp_norm: bool = False,
-                 architecture: List[tuple] = None,
-                 act: str = None,
+                 architecture: List[Union[Dict[Any, int], Dict[Any, Union[int, str]]]] = None,
+                 act: Union[str, nn.ReLU] = None,
                  epoch_size: int = None,
                  workers: int = 2,
                  voxel_sizes: Optional[dict] = None,
@@ -66,7 +67,10 @@ class ArgsContainer(object):
                  ssd_include: List[int] = None,
                  ssd_labels: str = None,
                  exclude_borders: int = 0,
-                 rebalance: dict = None):
+                 rebalance: dict = None,
+                 conv: Tuple[str, bool] = ('ConvPoint', False),
+                 search: str = 'SearchQuantized',
+                 model: str = 'ConvPointSeg'):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -168,6 +172,9 @@ class ArgsContainer(object):
         self._ssd_labels = ssd_labels
         self._exclude_borders = exclude_borders
         self._rebalance = rebalance
+        self._conv = conv
+        self._search = search
+        self._model = model
 
     @property
     def normalization(self):
@@ -416,6 +423,18 @@ class ArgsContainer(object):
         return self._rebalance
 
     @property
+    def conv(self):
+        return self._conv
+
+    @property
+    def search(self):
+        return self._search
+
+    @property
+    def model(self):
+        return self._model
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -475,7 +494,10 @@ class ArgsContainer(object):
                      'ssd_include': self._ssd_include,
                      'ssd_labels': self._ssd_labels,
                      'exclude_borders': self._exclude_borders,
-                     'rebalance': self._rebalance}
+                     'rebalance': self._rebalance,
+                     'conv': self._conv,
+                     'search': self._search,
+                     'model': self._model}
         return attr_dict
 
     def save2pkl(self, path: str):

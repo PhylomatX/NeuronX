@@ -11,22 +11,31 @@ from neuronx.classes.chunkhandler import ChunkHandler
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 
 
-def get_areas(set_path: str, out_path: str):
+def get_sso_specs(set_path: str, out_path: str, ssd: SuperSegmentationDataset):
     set_path = os.path.expanduser(set_path)
     out_path = os.path.expanduser(out_path)
-    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     files = glob.glob(set_path + '*.pkl')
+    total_edge_length = 0
+    total_voxel_size = 0
     for file in tqdm(files):
         sso_id = int(re.findall(r"/sso_(\d+).", file)[0])
-        sso = SuperSegmentationObject(sso_id)
-        svs = sso.svs
-        total_area = 0
-        for obj in svs:
-            total_area += obj.mesh_area
-        info = f'{file}: {total_area}\n'
+        sso = ssd.get_super_segmentation_object(sso_id)
+        total_edge_length += sso.total_edge_length()
+        total_voxel_size += sso.size
+        info = f'{sso_id}:\nskeleton path length:\t{sso.total_edge_length()}\nvoxel size:\t{sso.size}\n\n'
         with open(out_path, 'a') as f:
             f.write(info)
         f.close()
+    with open(out_path, 'a') as f:
+        f.write(f'total edge length: {total_edge_length}\ntotal voxel size: {total_voxel_size}')
+    f.close()
+
+
+if __name__ == '__main__':
+    # get_sso_specs('~/thesis/gt/20_09_27/voxeled/test/', '~/thesis/gt/20_09_27/voxeled/test_info.txt',
+    #               ssd=SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/"))
+    get_sso_specs('~/thesis/gt/20_09_27/voxeled/train/', '~/thesis/gt/20_09_27/voxeled/train_info.txt',
+                  ssd=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))
 
 
 def produce_set_info(data_path: str, out_path: str):
@@ -49,7 +58,6 @@ def eval_set_info(info_path: str, out_path: str, name: str):
     tvc_num = 0
     classes = {0: 'dendrite', 1: 'axon', 2: 'soma', 3: 'bouton', 4: 'terminal', 5: 'neck', 6: 'head'}
     # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    ssd = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/", version='axgt')
     tspecs = {}
     for key in tqdm(info):
         if 'sso' in key:
@@ -81,7 +89,7 @@ def eval_set_info(info_path: str, out_path: str, name: str):
             specs['mi_num'] = mi_num
 
             # summarize syns
-            sjs = sso.sjs
+            sjs = sso.syn_ssv
             sj_area = 0
             for obj in sjs:
                 sj_area += obj.mesh_area

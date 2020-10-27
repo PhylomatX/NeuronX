@@ -8,6 +8,7 @@ from morphx.processing import clouds, basics
 from elektronn3.models.convpoint import SegBig, SegAdapt
 from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.classes.torchhandler import TorchHandler
+from lightconvpoint.utils import get_network
 
 
 class SaveFeatures:
@@ -37,8 +38,16 @@ def analyse_features(m_path: str, args_path: str, out_path: str, val_path: str, 
     # load model specifications
     argscont = ArgsContainer().load_from_pkl(args_path)
 
+    lcp_flag = False
     # load model
-    if argscont.use_big:
+    if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
+        kwargs = {}
+        if argscont.model == 'ConvAdaptSeg':
+            kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act, norm=argscont.norm_type)
+        conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
+        model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
+        lcp_flag = True
+    elif argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
                        use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
                        kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
@@ -95,11 +104,25 @@ def analyse_features(m_path: str, args_path: str, out_path: str, val_path: str, 
 
     for c_ix, context in enumerate(contexts):
         # set hooks
-        layer_outs = SaveFeatures(list(model.children())[1])
-        act_outs = SaveFeatures([list(model.children())[0]])
+
+        if lcp_flag:
+            layer_outs = SaveFeatures(list(model.children())[0][1:])
+            act_outs = SaveFeatures([layer.activation for layer in list(model.children())[0][1:]])
+        else:
+            layer_outs = SaveFeatures(list(model.children())[1])
+            act_outs = SaveFeatures([list(model.children())[0]])
         feats = context[0].to(device, non_blocking=True)
         pts = context[1].to(device, non_blocking=True)
-        output = model(feats, pts).cpu().detach().numpy()
+
+        if lcp_flag:
+            pts = pts.transpose(1, 2)
+            feats = feats.transpose(1, 2)
+
+        output = model(feats, pts).cpu().detach()
+
+        if lcp_flag:
+            output = output.transpose(1, 2).numpy()
+
         if not test:
             output = np.argmax(output[0][context[2]].reshape(-1, th.num_classes), axis=1)
             pts = context[1][0].numpy()
@@ -112,9 +135,17 @@ def analyse_features(m_path: str, args_path: str, out_path: str, val_path: str, 
         for ix, layer in enumerate(layer_outs.features):
             if len(layer) < 2:
                 continue
-            feats = layer[0].detach().cpu().numpy()[0]
-            feats_act = act_outs.features[ix].detach().cpu().numpy()[0]
-            pts = layer[1].detach().cpu().numpy()[0]
+            feats = layer[0].detach().cpu()[0]
+            feats_act = act_outs.features[ix].detach().cpu()[0]
+            pts = layer[1].detach().cpu()[0]
+            if lcp_flag:
+                feats = feats.transpose(0, 1).numpy()
+                feats_act = feats_act.transpose(0, 1).numpy()
+                pts = pts.transpose(0, 1).numpy()
+            else:
+                feats = feats.numpy()
+                feats_act = feats_act.numpy()
+                pts = pts.numpy()
             x_offset = (pts[:, 0].max() - pts[:, 0].min()) * 1.5 * 3
             x_offset_act = x_offset / 3
             y_size = (pts[:, 1].max() - pts[:, 1].min()) * 1.5
@@ -187,10 +218,9 @@ def fit_cloud2layer(model_path: str, layer: int, filter: int, opt_steps: int, ou
 
 
 if __name__ == '__main__':
-    analyse_features(m_path='~/thesis/current_work/paper/dnh/2020_09_18_4000_4000/models/state_dict_e250.pth',
-                     args_path='~/thesis/current_work/paper/dnh/2020_09_18_4000_4000/argscont.pkl',
-                     out_path='~/thesis/current_work/paper/model_analysis/',
+    analyse_features(m_path='~/thesis/current_work/paper/dnh/2020_10_15_8000_8192_cp_cp_r/models/state_dict_e570.pth',
+                     args_path='~/thesis/current_work/paper/dnh/2020_10_15_8000_8192_cp_cp_r/argscont.pkl',
+                     out_path='~/thesis/current_work/paper/model_analysis/2020_10_15_8000_8192_cp_cp_r/',
                      val_path='~/thesis/gt/cmn/dnh/voxeled/evaluation/',
-                     context_list=[('sso_23400450', 1), ('sso_23400450', 10),
-                                   ('sso_23400450', 17), ('sso_24414208', 109)],
+                     context_list=[('sso_8003584', 1), ('sso_8003584', 2), ('sso_8003584', 3)],
                      label_remove=[1, 2, 3, 4],  label_mappings=[(5, 1), (6, 2)])

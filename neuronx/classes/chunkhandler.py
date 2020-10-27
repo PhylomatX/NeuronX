@@ -462,7 +462,8 @@ class ChunkHandler:
                         self._chunk_list.append((ix, chunk))
             ix, chunk = self._chunk_list[item]
             obj = self._objs[ix]
-            return objects.extract_cloud_subset(obj, chunk)
+            sample, idcs = objects.extract_cloud_subset(obj, chunk)
+            return sample, idcs, self._chunk_list[item][0]
         next_item = self._chunk_list[item]
         curr_obj_chunks = self._splitted_objs[next_item[0]]
         self._curr_obj = self._objs[self._obj_names.index(next_item[0])]

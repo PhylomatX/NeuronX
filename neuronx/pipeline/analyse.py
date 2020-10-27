@@ -279,7 +279,7 @@ def summarize_checkpoints(reports_path: str, out_path: str, checkpoints: List[in
                 met = np.array(summary[cl][metric])
                 summary[cl][metric] = (met.mean(), met.std())
     # write report with results
-    report = f"{'metric':<20}"
+    report = f"{str(checkpoints)}\n\n{'metric':<20}"
     for metric in metrics:
         report += f"{f'{metric}':<20}"
     for cl in classes:
@@ -291,13 +291,14 @@ def summarize_checkpoints(reports_path: str, out_path: str, checkpoints: List[in
         acc = summary['accuracy']
         report += f"\n\n{f'accuracy:':<20}{f'{round(acc[0], precision)} +- {round(acc[1], precision)}'}"
     out_path = os.path.expanduser(out_path)
-    with open(out_path, 'w') as f:
+    report += '\n\n\n'
+    with open(out_path, 'a') as f:
         f.write(report)
 
 
 if __name__ == '__main__':
-    base_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_big/' \
-                'eval_test_valiter1_batchsize-1/'
-    eval_path = base_path + 'eval_test_mv.pkl'
+    base_path = '~/thesis/current_work/paper/ads_thesis/2020_09_28_12000_15000/' \
+                'eval_valiter1_batchsize-1/'
+    eval_path = base_path + 'eval_mv.pkl'
     report_path = base_path + 'checkpoint_summary.txt'
-    summarize_checkpoints(eval_path, report_path, [70, 90, 100, 110, 120, 130, 140, 150, 160, 170], precision=3)
+    summarize_checkpoints(eval_path, report_path, [i for i in range(500, 700, 20)], precision=3)
