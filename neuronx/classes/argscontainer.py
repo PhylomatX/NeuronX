@@ -19,7 +19,7 @@ class ArgsContainer(object):
                  input_channels: int = None,
                  features: dict = None,
                  max_step_size: int = 500000,
-                 density_mode: bool = True,
+                 density_mode: bool = False,
                  chunk_size: int = None,
                  tech_density: int = None,
                  bio_density: int = None,
@@ -29,7 +29,7 @@ class ArgsContainer(object):
                  val_iter: int = 1,
                  val_freq: int = 20,
                  track_running_stats: bool = False,
-                 use_big: bool = True,
+                 use_big: bool = False,
                  random_seed: int = 0,
                  use_cuda: bool = True,
                  label_mappings: List[Tuple[int, int]] = None,
@@ -53,13 +53,13 @@ class ArgsContainer(object):
                  centroids: bool = False,
                  nn_center: bool = True,
                  optim_kernels: bool = True,
-                 pl: int = 64,
+                 pl: int = 32,
                  dropout: float = 0,
                  split_on_demand: bool = False,
                  split_jitter: int = 0,
                  cp_norm: bool = False,
                  architecture: List[Union[Dict[Any, int], Dict[Any, Union[int, str]]]] = None,
-                 act: Union[str, nn.ReLU] = None,
+                 act: Union[str, nn.ReLU] = nn.ReLU,
                  epoch_size: int = None,
                  workers: int = 2,
                  voxel_sizes: Optional[dict] = None,
@@ -70,7 +70,12 @@ class ArgsContainer(object):
                  rebalance: dict = None,
                  conv: Tuple[str, bool] = ('ConvPoint', False),
                  search: str = 'SearchQuantized',
-                 model: str = 'ConvPointSeg'):
+                 model: str = 'ConvAdaptSeg',
+                 extend_no_pred: List[int] = None,
+                 target_names: List[str] = None,
+                 val_label_mappings: List[Tuple[int, int]] = None,
+                 val_label_remove: List[int] = None,
+                 stop_epoch: int = 9999):
 
         if save_root is not None:
             self._save_root = os.path.expanduser(save_root)
@@ -175,6 +180,11 @@ class ArgsContainer(object):
         self._conv = conv
         self._search = search
         self._model = model
+        self._extend_no_pred = extend_no_pred
+        self._target_names = target_names
+        self._val_label_mappings = val_label_mappings
+        self._val_label_remove = val_label_remove
+        self._stop_epoch = stop_epoch
 
     @property
     def normalization(self):
@@ -435,6 +445,26 @@ class ArgsContainer(object):
         return self._model
 
     @property
+    def extend_no_pred(self):
+        return self._extend_no_pred
+
+    @property
+    def target_names(self):
+        return self._target_names
+
+    @property
+    def val_label_mappings(self):
+        return self._val_label_mappings
+
+    @property
+    def val_label_remove(self):
+        return self._val_label_remove
+
+    @property
+    def stop_epoch(self):
+        return self._stop_epoch
+
+    @property
     def attr_dict(self):
         attr_dict = {'save_root': self._save_root,
                      'train_path': self._train_path,
@@ -497,7 +527,12 @@ class ArgsContainer(object):
                      'rebalance': self._rebalance,
                      'conv': self._conv,
                      'search': self._search,
-                     'model': self._model}
+                     'model': self._model,
+                     'extend_no_pred': self._extend_no_pred,
+                     'target_names': self._target_names,
+                     'val_label_mappings': self._val_label_mappings,
+                     'val_label_remove': self._val_label_remove,
+                     'stop_epoch': self._stop_epoch}
         return attr_dict
 
     def save2pkl(self, path: str):

@@ -2,9 +2,12 @@ import os
 import re
 import glob
 import pickle
+import csv
 import matplotlib as mpl
 from tqdm import tqdm
-from morphx.processing import basics
+import numpy as np
+from morphx.processing import basics, clouds, ensembles
+from morphx.classes.cloudensemble import CloudEnsemble
 from syconn import global_params
 from matplotlib import pyplot as plt
 from neuronx.classes.chunkhandler import ChunkHandler
@@ -31,11 +34,56 @@ def get_sso_specs(set_path: str, out_path: str, ssd: SuperSegmentationDataset):
     f.close()
 
 
+def dataspecs2csv(set_paths: dict, out_path: str, ssds: dict):
+    out_path = os.path.expanduser(out_path)
+    out_file = open(out_path, 'w')
+    spec_writer = csv.writer(out_file, delimiter=',')
+    for key in set_paths:
+        ssd = ssds[key]
+        spec_writer.writerow([key, 'edge_length', 'size', 'n_dendrite', 'n_axon', 'n_soma', 'n_bouton', 'n_terminal',
+                              'n_neck', 'n_head', 'v_dendrite', 'v_axon', 'v_soma', 'v_bouton', 'v_terminal', 'v_neck',
+                              'v_head'])
+        set_path = os.path.expanduser(set_paths[key])
+        files = glob.glob(set_path + '*.pkl')
+        for file in tqdm(files):
+            sso_id = int(re.findall(r"/sso_(\d+).", file)[0])
+            sso = ssd.get_super_segmentation_object(sso_id)
+            ce = ensembles.ensemble_from_pkl(file)
+            n_unique = np.unique(ce.node_labels, return_counts=True)
+            v_unique = np.unique(ce.labels, return_counts=True)
+            n_list = []
+            n_dict = {}
+            for ix, n in enumerate(n_unique[0]):
+                n_dict[n] = n_unique[1][ix]
+            v_list = []
+            v_dict = {}
+            for ix, v in enumerate(v_unique[0]):
+                v_dict[v] = v_unique[1][ix]
+            for i in range(7):
+                try:
+                    n_list.append(n_dict[i])
+                except KeyError:
+                    n_list.append(0)
+                try:
+                    v_list.append(v_dict[i])
+                except KeyError:
+                    v_list.append(0)
+            spec_writer.writerow([sso_id, int(sso.total_edge_length()), sso.size, *n_list, *v_list])
+        out_file.write('\n\n\n\n')
+    out_file.close()
+
+
 if __name__ == '__main__':
-    # get_sso_specs('~/thesis/gt/20_09_27/voxeled/test/', '~/thesis/gt/20_09_27/voxeled/test_info.txt',
-    #               ssd=SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/"))
-    get_sso_specs('~/thesis/gt/20_09_27/voxeled/train/', '~/thesis/gt/20_09_27/voxeled/train_info.txt',
-                  ssd=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))
+    paths = dict(TRAIN='~/thesis/gt/20_09_27/voxeled/train/',
+                 TEST='~/thesis/gt/20_09_27/voxeled/test/')
+
+    ssds = dict(TRAIN=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"),
+                TEST=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))
+
+    dataspecs2csv(paths, '~/thesis/gt/20_09_27/voxeled/data_specs.csv', ssds)
+
+    # get_sso_specs('~/thesis/gt/20_09_27/voxeled/train/', '~/thesis/gt/20_09_27/voxeled/train_info.txt',
+    #               ssd=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))
 
 
 def produce_set_info(data_path: str, out_path: str):

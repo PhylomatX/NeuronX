@@ -9,18 +9,53 @@ from morphx.processing import basics
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
-def produce_chunks():
-    """ Create and save all resulting chunks of an dataset. """
-    features = {'hc': np.array([1, 0, 0, 0]),
-                'mi': np.array([0, 1, 0, 0]),
-                'vc': np.array([0, 0, 1, 0]),
-                'sy': np.array([0, 0, 0, 1])}
-    chunk_size = 10000
+def produce_chunks(chunk_size: int, sample_num: int):
+    """ Create and analyse all resulting chunks of an dataset. """
+    features = {'hc': np.array([1])}
+    center = clouds.Compose([clouds.Identity()])
+    path = os.path.expanduser('~/working_dir/gt/cmn/dnh/voxeled/')
+    save_path = f'{path}analysis/'
+    ch = ChunkHandler(path, sample_num=sample_num, density_mode=False, ctx_size=chunk_size, obj_feats=features,
+                      transform=center, splitting_redundancy=5, label_mappings=[(2, 0), (5, 1), (6, 2)],
+                      label_remove=[2], sampling=True, verbose=True, specific=True, hybrid_mode=True)
+    vert_nums = []
+    counter = 0
+    chunk_num = 0
+    for item in ch.obj_names:
+        chunk_num += ch.get_obj_length(item)
+        for i in range(ch.get_obj_length(item)):
+            sample, idcs, vert_num = ch[(item, i)]
+            if vert_num < 10000:
+                if not os.path.exists(save_path + f'examples/{item}/'):
+                    os.makedirs(save_path + f'examples/{item}/')
+                with open(f'{save_path}examples/{item}/{i}.pkl', 'wb') as f:
+                    pickle.dump([sample, sample], f)
+            vert_nums.append(vert_num)
+            if vert_num < ch.sample_num:
+                counter += 1
+    vert_nums = np.array(vert_nums)
+    analysis = f"Min: {vert_nums.min()}\nMax: {vert_nums.max()}\nMean: {vert_nums.mean()}\nChunks with less points than requested: {counter}/{chunk_num}"
+    print(analysis)
+    with open(f'{save_path}{chunk_size}_vertnums.pkl', 'wb') as f:
+        pickle.dump(vert_nums, f)
+    with open(f'{save_path}{chunk_size}_{sample_num}.txt', 'w') as f:
+        f.write(analysis)
+    f.close()
+    return counter / chunk_num
+
+
+def compare_transforms(chunk_size: int, sample_num: int):
+    """ Create and save all resulting chunks of an dataset with different transforms """
+    # features = {'hc': np.array([1, 0, 0, 0]),
+    #             'mi': np.array([0, 1, 0, 0]),
+    #             'vc': np.array([0, 0, 1, 0]),
+    #             'sy': np.array([0, 0, 0, 1])}
+    features = {'hc': np.array([1])}
     identity = clouds.Compose([clouds.Identity()])
     center = clouds.Compose([clouds.Center()])
     path = os.path.expanduser('~/thesis/gt/cmn/dnh/voxeled/')
     save_path = f'{path}examples/'
-    ch = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=True,
+    ch = ChunkHandler(path, sample_num=sample_num, density_mode=False, tech_density=100, bio_density=100, specific=True,
                       ctx_size=chunk_size, obj_feats=features, transform=identity, splitting_redundancy=2,
                       label_mappings=[(5, 3), (6, 4)], label_remove=None, sampling=True, verbose=True)
     ch_transform = ChunkHandler(path, sample_num=5000, density_mode=False, tech_density=100, bio_density=100, specific=True,
@@ -161,4 +196,20 @@ def apply_chunkhandler_ssd():
 
 
 if __name__ == '__main__':
-    apply_chunkhandler(os.path.expanduser('~/thesis/gt/new_GT/chunks/'))
+    produce_chunks(17000, 8192)
+    # report = 'context, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536\n'
+    # for context in [1000, 2000, 4000, 8000, 12000, 16000, 20000, 24000, 28000, 32000]:
+    #     context_report = f'{context / 1000}'
+    #     for point_num in [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]:
+    #         print(f'Analysing context {context}, point_num {point_num}')
+    #         percentage = round(produce_chunks(context, point_num), 2)
+    #         print(percentage)
+    #         context_report += f', {percentage}'
+    #     context_report += '\n'
+    #     report += context_report
+    # print(report)
+    # path = os.path.expanduser('~/working_dir/gt/cmn/dnh/voxeled/')
+    # save_path = f'{path}analysis/'
+    # with open(f'{save_path}report.txt', 'w') as f:
+    #     f.write(report)
+    # f.close()

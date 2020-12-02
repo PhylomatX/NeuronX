@@ -147,7 +147,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
                model_type: str = 'state_dict.pth', val_iter: int = 1, batch_num: int = -1,
                cloud_out_path: str = None, redundancy: int = -1, force_split: bool = False, same_seeds: bool = False,
                label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
-               border_exclusion: int = 0):
+               border_exclusion: int = 0, model = None):
     training_path = os.path.expanduser(training_path)
     val_path = os.path.expanduser(val_path)
     out_path = os.path.expanduser(out_path)
@@ -167,41 +167,41 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         device = torch.device('cpu')
 
     lcp_flag = False
-    # load model
-    if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
-        kwargs = {}
+    if model_type == 'loaded':
+        model = model
         if argscont.model == 'ConvAdaptSeg':
-            kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act,
-                          norm=argscont.norm_type)
-        conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
-        model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
-        lcp_flag = True
-    elif argscont.use_big:
-        model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
-                       use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
-                       kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
-                       reductions=argscont.reductions, first_layer=argscont.first_layer,
-                       padding=argscont.padding, nn_center=argscont.nn_center, centroids=argscont.centroids,
-                       pl=argscont.pl, normalize=argscont.cp_norm)
+            lcp_flag = True
     else:
-        print("Adaptable model was found!")
-        model = SegAdapt(argscont.input_channels, argscont.class_num, architecture=argscont.architecture,
-                         trs=argscont.track_running_stats, dropout=argscont.dropout, use_bias=argscont.use_bias,
-                         norm_type=argscont.norm_type, kernel_size=argscont.kernel_size, padding=argscont.padding,
-                         nn_center=argscont.nn_center, centroids=argscont.centroids, kernel_num=argscont.pl,
-                         normalize=argscont.cp_norm, act=argscont.act)
-    try:
-        full = torch.load(training_path + model_type)
-        model.load_state_dict(full)
-    except RuntimeError:
-        model.load_state_dict(full['model_state_dict'])
-    model.to(device)
-
-    # load scripted model
-    # model_path = save_root + '/' + name + '/model.pts'
-    # model = torch.jit.load(model_path, map_location=device)
-
-    model.eval()
+        # load model
+        if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
+            kwargs = {}
+            if argscont.model == 'ConvAdaptSeg':
+                kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act,
+                              norm=argscont.norm_type)
+            conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
+            model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
+            lcp_flag = True
+        elif argscont.use_big:
+            model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
+                           use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
+                           kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
+                           reductions=argscont.reductions, first_layer=argscont.first_layer,
+                           padding=argscont.padding, nn_center=argscont.nn_center, centroids=argscont.centroids,
+                           pl=argscont.pl, normalize=argscont.cp_norm)
+        else:
+            print("Adaptable model was found!")
+            model = SegAdapt(argscont.input_channels, argscont.class_num, architecture=argscont.architecture,
+                             trs=argscont.track_running_stats, dropout=argscont.dropout, use_bias=argscont.use_bias,
+                             norm_type=argscont.norm_type, kernel_size=argscont.kernel_size, padding=argscont.padding,
+                             nn_center=argscont.nn_center, centroids=argscont.centroids, kernel_num=argscont.pl,
+                             normalize=argscont.cp_norm, act=argscont.act)
+        try:
+            full = torch.load(training_path + model_type)
+            model.load_state_dict(full)
+        except RuntimeError:
+            model.load_state_dict(full['model_state_dict'])
+        model.to(device)
+        model.eval()
 
     # set up environment
     chunk_times = []
@@ -213,9 +213,15 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     if redundancy == -1:
         redundancy = argscont.splitting_redundancy
     if label_remove is None:
-        label_remove = argscont.label_remove
+        if argscont.val_label_remove is not None:
+            label_remove = argscont.val_label_remove
+        else:
+            label_remove = argscont.label_remove
     if label_mappings is None:
-        label_mappings = argscont.label_mappings
+        if argscont.val_label_mappings is not None:
+            label_mappings = argscont.val_label_mappings
+        else:
+            label_mappings = argscont.label_mappings
 
     th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                       bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
@@ -300,7 +306,7 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
 
 def validate_training_set(set_path: str, val_path: str, out_path: str, model_type: str = 'state_dict.pth',
                           val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None, redundancy: int = -1,
-                          force_split: bool = False):
+                          force_split: bool = False, model=None):
     """ Validate multiple trainings.
 
     Args:
@@ -333,7 +339,7 @@ def validate_training_set(set_path: str, val_path: str, out_path: str, model_typ
             curr_out_path = None
         validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
                    val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                   force_split=force_split)
+                   force_split=force_split, model=model)
 
 
 def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
@@ -341,7 +347,7 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
                                   cloud_out_path: str = None, specific_model: int = None, redundancy: int = -1,
                                   force_split: bool = False, model_max: int = None,
                                   label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
-                                  same_seeds: bool = False, border_exclusion: int = 0):
+                                  same_seeds: bool = False, border_exclusion: int = 0, model = None):
     """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
         with the format: 'state_dict_e{epoch_number}.pth'.
 
@@ -370,31 +376,36 @@ def validate_multi_model_training(training_path: str, val_path: str, out_path: s
         curr_out_path = cloud_out_path + '/examples/'
     else:
         curr_out_path = None
-    # validate different models
-    model_path = training_path + 'models/'
-    if not os.path.exists(model_path):
-        print("Model folder was not found in training. The folder must be named 'models'.")
-        return
-    models = glob.glob(model_path + 'state_dict_*')
-    models.sort()
-    if specific_model is None:
-        if model_min is None:
-            model_min = 0
-        if model_max is None:
-            model_max = 500
-        model_idcs = np.arange(model_min, model_max, model_freq)
-        for ix in model_idcs:
-            model_type = f'state_dict_e{ix}.pth'
-            if curr_out_path is not None:
-                curr_out_path += f'epoch_{ix}/'
-            validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
+    if model is None:
+        # validate different models
+        model_path = training_path + 'models/'
+        if not os.path.exists(model_path):
+            print("Model folder was not found in training. The folder must be named 'models'.")
+            return
+        models = glob.glob(model_path + 'state_dict_*')
+        models.sort()
+        if specific_model is None:
+            if model_min is None:
+                model_min = 0
+            if model_max is None:
+                model_max = 500
+            model_idcs = np.arange(model_min, model_max, model_freq)
+            for ix in model_idcs:
+                model_type = f'state_dict_e{ix}.pth'
+                if curr_out_path is not None:
+                    curr_out_path += f'epoch_{ix}/'
+                validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
+                           val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
+                           force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
+                           same_seeds=same_seeds, border_exclusion=border_exclusion)
+        else:
+            model_type = f'state_dict_e{specific_model}.pth'
+            validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
                        val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
                        force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
                        same_seeds=same_seeds, border_exclusion=border_exclusion)
     else:
-        model_type = f'state_dict_e{specific_model}.pth'
-        validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
+        validation(argscont, '', val_path, out_path + f'epoch_{specific_model}' + '/', model_type='loaded',
                    val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
                    force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
-                   same_seeds=same_seeds, border_exclusion=border_exclusion)
-
+                   same_seeds=same_seeds, border_exclusion=border_exclusion, model=model)

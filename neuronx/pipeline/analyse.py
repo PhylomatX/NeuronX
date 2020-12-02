@@ -297,8 +297,10 @@ def summarize_checkpoints(reports_path: str, out_path: str, checkpoints: List[in
 
 
 if __name__ == '__main__':
-    base_path = '~/thesis/current_work/paper/ads_thesis/2020_09_28_12000_15000/' \
-                'eval_valiter1_batchsize-1/'
-    eval_path = base_path + 'eval_mv.pkl'
+
+    base_path = '~/thesis/current_work/paper/ads_cmn/2020_09_17_12000_12000_big/' \
+                'eval_test_red1_valiter1_batchsize-1/'
+    eval_path = base_path + 'eval_test_red1_mv.pkl'
     report_path = base_path + 'checkpoint_summary.txt'
-    summarize_checkpoints(eval_path, report_path, [i for i in range(500, 700, 20)], precision=3)
+    summarize_checkpoints(eval_path, report_path, [i for i in range(90, 140, 5)], precision=3)
+

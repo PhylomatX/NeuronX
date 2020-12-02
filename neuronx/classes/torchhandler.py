@@ -48,7 +48,8 @@ class TorchHandler(data.Dataset):
                  ssd_include: List[int] = None,
                  ssd_labels: str = None,
                  exclude_borders: int = 0,
-                 rebalance: dict = None):
+                 rebalance: dict = None,
+                 extend_no_pred: List[int] = None):
         """ Initializes Dataset. """
         self._ch = ChunkHandler(data_path, sample_num, density_mode=density_mode, bio_density=bio_density,
                                 tech_density=tech_density, ctx_size=ctx_size, transform=transform,
@@ -64,6 +65,7 @@ class TorchHandler(data.Dataset):
         self._sample_num = sample_num
         self._feat_dim = feat_dim
         self._padding = padding
+        self._extend_no_pred = extend_no_pred
 
     def __len__(self):
         return len(self._ch)
@@ -106,6 +108,9 @@ class TorchHandler(data.Dataset):
         for name in sample.no_pred:
             if name in sample.encoding.keys():
                 no_pred_labels.append(sample.encoding[name])
+        if self._extend_no_pred is not None:
+            for label in self._extend_no_pred:
+                no_pred_labels.append(label)
         # build mask for all indices which should not be used for loss calculation
         idcs = np.isin(sample.labels, no_pred_labels).reshape(-1)
         if self._padding is not None:

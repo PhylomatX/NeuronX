@@ -78,54 +78,18 @@ def training_thread(acont: ArgsContainer):
 
     # set up environment
     train_transforms = clouds.Compose(acont.train_transforms)
-    train_ds = TorchHandler(data_path=acont.train_path,
-                            sample_num=acont.sample_num,
-                            nclasses=acont.class_num,
-                            feat_dim=acont.input_channels,
-                            density_mode=acont.density_mode,
-                            ctx_size=acont.chunk_size,
-                            bio_density=acont.bio_density,
-                            tech_density=acont.tech_density,
-                            transform=train_transforms,
-                            obj_feats=acont.features,
-                            label_mappings=acont.label_mappings,
-                            hybrid_mode=acont.hybrid_mode,
-                            splitting_redundancy=acont.splitting_redundancy,
-                            label_remove=acont.label_remove,
-                            sampling=acont.sampling,
-                            padding=acont.padding,
-                            split_on_demand=acont.split_on_demand,
-                            split_jitter=acont.split_jitter,
-                            epoch_size=acont.epoch_size,
-                            workers=acont.workers,
-                            voxel_sizes=acont.voxel_sizes,
-                            ssd_exclude=acont.ssd_exclude,
-                            ssd_include=acont.ssd_include,
-                            ssd_labels=acont.ssd_labels,
-                            exclude_borders=acont.exclude_borders,
-                            rebalance=acont.rebalance)
-
-    if acont.use_val:
-        val_transforms = clouds.Compose(acont.val_transforms)
-        val_ds = TorchHandler(acont.val_path, acont.sample_num, acont.class_num, acont.input_channels,
-                              density_mode=acont.density_mode,
-                              ctx_size=acont.chunk_size,
-                              bio_density=acont.bio_density,
-                              tech_density=acont.tech_density,
-                              transform=val_transforms,
-                              obj_feats=acont.features,
-                              label_mappings=acont.label_mappings,
-                              hybrid_mode=acont.hybrid_mode,
-                              splitting_redundancy=acont.splitting_redundancy,
-                              label_remove=acont.label_remove,
-                              sampling=acont.sampling)
-
-        # trainer3D was updated to new validation, so prediction mapping is not necessary any more.
-        pm = None
-        # pm = PredictionMapper(acont.val_path, f'{acont.save_root}validation/{name}/', splitfile=val_ds.splitfile)
-    else:
-        val_ds = None
-        pm = None
+    train_ds = TorchHandler(data_path=acont.train_path, sample_num=acont.sample_num, nclasses=acont.class_num,
+                            feat_dim=acont.input_channels, density_mode=acont.density_mode,
+                            ctx_size=acont.chunk_size, bio_density=acont.bio_density,
+                            tech_density=acont.tech_density, transform=train_transforms,
+                            obj_feats=acont.features, label_mappings=acont.label_mappings,
+                            hybrid_mode=acont.hybrid_mode, splitting_redundancy=acont.splitting_redundancy,
+                            label_remove=acont.label_remove, sampling=acont.sampling, padding=acont.padding,
+                            split_on_demand=acont.split_on_demand, split_jitter=acont.split_jitter,
+                            epoch_size=acont.epoch_size, workers=acont.workers, voxel_sizes=acont.voxel_sizes,
+                            ssd_exclude=acont.ssd_exclude, ssd_include=acont.ssd_include,
+                            ssd_labels=acont.ssd_labels, exclude_borders=acont.exclude_borders,
+                            rebalance=acont.rebalance, extend_no_pred=acont.extend_no_pred)
 
     # initialize optimizer, scheduler, loss and trainer
     optimizer = None
@@ -169,17 +133,22 @@ def training_thread(acont: ArgsContainer):
     if acont.use_cuda:
         criterion.cuda()
 
+    if acont.use_val:
+        val_path = acont.val_path
+    else:
+        val_path = None
+
     trainer = Trainer3d(
         model=model,
         criterion=criterion,
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
-        valid_dataset=val_ds,
+        v_path=val_path,
         val_freq=acont.val_freq,
-        val_iter=acont.val_iter,
+        val_red=acont.val_iter,
         channel_num=acont.input_channels,
-        pred_mapper=pm,
+        pred_mapper=None,
         batchsize=batch_size,
         num_workers=min(max(0, acont.batch_size - 2), 5),
         save_root=acont.save_root,
@@ -190,13 +159,16 @@ def training_thread(acont: ArgsContainer):
         enable_save_trace=jit,
         collate_fn=None,
         batch_avg=acont.batch_avg,
-        lcp_flag=lcp_flag
+        lcp_flag=lcp_flag,
+        target_names=acont.target_names,
+        stop_epoch=acont.stop_epoch,
+        enable_tensorboard=False
     )
     # Archiving training script, src folder, env info
     Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
     acont.save2pkl(trainer.save_path + '/argscont.pkl')
     with open(trainer.save_path + '/argscont.txt', 'w') as f:
-        f.write(str(argscont.attr_dict))
+        f.write(str(acont.attr_dict))
     f.close()
     # Start training
     trainer.run(max_steps)
@@ -223,10 +195,10 @@ if __name__ == '__main__':
     #             'vc': np.array([0, 0, 0, 1, 0]),
     #             'sy': np.array([0, 0, 0, 0, 1])}
 
-    features = {'hc': np.array([1, 0, 0, 0]),
-                'mi': np.array([0, 1, 0, 0]),
-                'vc': np.array([0, 0, 1, 0]),
-                'sy': np.array([0, 0, 0, 1])}
+    # features = {'hc': np.array([1, 0, 0, 0]),
+    #             'mi': np.array([0, 1, 0, 0]),
+    #             'vc': np.array([0, 0, 1, 0]),
+    #             'sy': np.array([0, 0, 0, 1])}
 
     # train_transforms = [clouds.RandomVariation((-40, 40)),
     #                     clouds.RandomRotate(apply_flip=True),
@@ -238,65 +210,50 @@ if __name__ == '__main__':
 
     # features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
 
-    # features = {'hc': np.array([1])}
+    features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/thesis/current_work/paper/dnh/',
-                             train_path='/u/jklimesch/thesis/gt/20_09_27/voxeled/train/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/',
+                             train_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/',
                              sample_num=sample_num,
-                             name=name + f'_7class_cp_cp_fps',
-                             class_num=7,
-                             train_transforms=[clouds.RandomVariation((-40, 40)),
-                                               clouds.RandomRotate(apply_flip=True),
-                                               clouds.Center(),
-                                               clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
-                                               clouds.RandomScale(distr_scale=0.1, distr='uniform'),
-                                               clouds.Center()],
-                             batch_size=8,
-                             input_channels=4,
-                             use_val=False,
-                             features=features,
+                             name=name + f'_cp_cp_q',
+                             random_seed=1,
+                             class_num=3,
+                             train_transforms=[clouds.RandomVariation((-40, 40)), clouds.RandomRotate(apply_flip=True),
+                                               clouds.Center(), clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
+                                               clouds.RandomScale(distr_scale=0.1, distr='uniform'), clouds.Center()],
+                             batch_size=16,
+                             input_channels=1,
+                             use_val=True,
+                             val_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/evaluation/',
+                             val_freq=30,
+                             features={'hc': np.array([1])},
                              chunk_size=chunk_size,
-                             tech_density=100,
-                             bio_density=bio_density,
-                             density_mode=density_mode,
-                             max_step_size=10000000,
-                             hybrid_mode=False,
-                             scheduler='steplr',
-                             optimizer='adam',
+                             max_step_size=100000000,
+                             hybrid_mode=True,
                              splitting_redundancy=5,
                              norm_type='gn',
-                             kernel_size=16,
-                             padding=None,
-                             centroids=False,
-                             pl=32,
-                             dropout=0,
-                             cp_norm=False,
-                             use_big=False,
-                             split_on_demand=False,
-                             exclude_borders=0,
-                             act=nn.ReLU,
-                             label_remove=[-2],
-                             architecture=[dict(ic=-1, oc=1, ks=16, nn=32, np=-1),
-                                           dict(ic=1, oc=1, ks=16, nn=32, np=2048),
-                                           dict(ic=1, oc=1, ks=16, nn=32, np=1024),
-                                           dict(ic=1, oc=1, ks=16, nn=32, np=256),
-                                           dict(ic=1, oc=2, ks=16, nn=32, np=64),
-                                           dict(ic=2, oc=2, ks=16, nn=16, np=16),
-                                           dict(ic=2, oc=2, ks=16, nn=8, np=8),
-                                           dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-                                           dict(ic=4, oc=2, ks=16, nn=4, np='d'),
-                                           dict(ic=4, oc=1, ks=16, nn=8, np='d'),
-                                           dict(ic=2, oc=1, ks=16, nn=16, np='d'),
-                                           dict(ic=2, oc=1, ks=16, nn=16, np='d'),
-                                           dict(ic=2, oc=1, ks=16, nn=16, np='d')],
-                             model='ConvAdaptSeg',
-                             conv=('ConvPoint', False),
-                             search='SearchFPS')
+                             label_remove=[2],
+                             label_mappings=[(2, 0), (5, 1), (6, 2)],
+                             val_label_mappings=[(5, 1), (6, 2)],
+                             val_label_remove=[-2, 1, 2, 3, 4],
+                             architecture=[{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+                                           {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
+                                           {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
+                                           {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
+                                           {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+                                           {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
+                                           {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
+                                           {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                                           {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                                           {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
+                                           {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                           {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                           {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}],
+                             target_names=['dendrite', 'neck', 'head'])
     training_thread(argscont)
 
     # clouds.Center(),
     # clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000))
-
 
 # [dict(ic=-1, oc=1, ks=16, nn=32, np=-1),
 #                                            dict(ic=1, oc=1, ks=16, nn=32, np=2048),
