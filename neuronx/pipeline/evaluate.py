@@ -85,7 +85,7 @@ def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: b
     basics.save2pkl(reports, set_path, name=eval_name)
 
 
-def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer, report_name: str = 'Evaluation',
+def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer = None, report_name: str = 'Evaluation',
                     total: bool = False, mode: str = 'mvs', filters: bool = False, drop_unpreds: bool = True,
                     data_type: str = 'ce', targets: list = None, label_mappings: List[Tuple[int, int]] = None,
                     label_remove: List[int] = None):
@@ -314,35 +314,49 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/thesis/current_work/paper/dnh_model_comparison/'
-    # v_path = '/u/jklimesch/thesis/gt/20_09_27/voxeled/test/'
-    v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
+    s_path = '~/working_dir/paper/hierarchy/'
+    v_path = '/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/'
+    # v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
     # v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
     # target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'spine']
     # target_names = ['shaft', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
-    target_names = ['dendrite', 'neck', 'head']
+    # target_names = ['dendrite', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma']
     # target_names = ['axon', 'bouton', 'terminal']
+    target_names = []
 
-    s_paths = ['2020_11_16_8000_8192_cp_cp_q_nn_4/']
+    s_paths = ['dnh/']
+
+    red = 5
+    for ix, p in enumerate(s_paths):
+        model_max = 700
+        model_freq = 30
+        p = s_path + p
+        print(f"\n\nProcessing {p}")
+        eval_name = f'20_09_27_test_eval_red{red}'
+        full_evaluation_pipe(p, v_path, eval_name=eval_name, pipe_steps=[True, False], val_iter=1, batch_num=-1,
+                             save_worst_examples=False, val_type='multiple_model', specific_model=390, label_remove=[-2],
+                             label_mappings=[], target_names=target_names, redundancy=red, force_split=False,
+                             border_exclusion=0)
+
+        # report_name = eval_name + '_mv'
+        # o_path = p + eval_name + '_valiter1_batchsize-1/'
+        # analyse.summarize_reports(o_path, report_name)
+        # r_path = o_path + report_name + '.pkl'
+        # analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
+        #                           filter_identifier=False, neg_identifier=[], time=True)
+
+    s_paths = ['abt/']
 
     for ix, p in enumerate(s_paths):
         model_max = 700
         model_freq = 30
         p = s_path + p
         print(f"\n\nProcessing {p}")
-        eval_name = 'eval_red1'
-        full_evaluation_pipe(p, v_path, eval_name=eval_name, pipe_steps=[True, True], val_iter=1, batch_num=-1,
-                             save_worst_examples=False, val_type='multiple_model', model_min=0, model_max=model_max,
-                             model_freq=model_freq, label_remove=[-2, 1, 2, 3, 4], label_mappings=[(5, 1), (6, 2)],
-                             target_names=target_names, redundancy=1, force_split=False,
+        eval_name = f'20_09_27_test_eval_red{red}'
+        full_evaluation_pipe(p, v_path, eval_name=eval_name, pipe_steps=[True, False], val_iter=1, batch_num=-1,
+                             save_worst_examples=False, val_type='multiple_model', specific_model=180, label_remove=[-2],
+                             label_mappings=[], target_names=target_names, redundancy=red, force_split=False,
                              border_exclusion=0)
-
-        report_name = eval_name + '_mv'
-        o_path = p + eval_name + '_valiter1_batchsize-1/'
-        analyse.summarize_reports(o_path, report_name)
-        r_path = o_path + report_name + '.pkl'
-        analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-                                  filter_identifier=False, neg_identifier=[], time=True)

@@ -70,7 +70,7 @@ class ArgsContainer(object):
                  rebalance: dict = None,
                  conv: Tuple[str, bool] = ('ConvPoint', False),
                  search: str = 'SearchQuantized',
-                 model: str = 'ConvAdaptSeg',
+                 model: str = None,
                  extend_no_pred: List[int] = None,
                  target_names: List[str] = None,
                  val_label_mappings: List[Tuple[int, int]] = None,

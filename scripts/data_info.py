@@ -74,13 +74,17 @@ def dataspecs2csv(set_paths: dict, out_path: str, ssds: dict):
 
 
 if __name__ == '__main__':
-    paths = dict(TRAIN='~/thesis/gt/20_09_27/voxeled/train/',
-                 TEST='~/thesis/gt/20_09_27/voxeled/test/')
+    # paths = dict(TRAIN='~/working_dir/gt/cmn/dnh/voxeled/',
+    #              TEST='~/working_dir/gt/cmn/dnh/voxeled/evaluation/')
 
-    ssds = dict(TRAIN=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"),
-                TEST=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))
+    paths = dict(TEST='~/working_dir/gt/cmn/ads/train/voxeled/')
 
-    dataspecs2csv(paths, '~/thesis/gt/20_09_27/voxeled/data_specs.csv', ssds)
+    # ssds = dict(TRAIN=SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/"),
+    #             TEST=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))
+
+    ssds = dict(TEST=SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/"))
+
+    dataspecs2csv(paths, '~/working_dir/gt/cmn/ads/test.csv', ssds)
 
     # get_sso_specs('~/thesis/gt/20_09_27/voxeled/train/', '~/thesis/gt/20_09_27/voxeled/train_info.txt',
     #               ssd=SuperSegmentationDataset("/wholebrain/songbird/j0126/areaxfs_v6/"))

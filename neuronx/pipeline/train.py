@@ -179,8 +179,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 8192
-    chunk_size = 8000
+    sample_num = 4096
+    chunk_size = 4000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -195,10 +195,10 @@ if __name__ == '__main__':
     #             'vc': np.array([0, 0, 0, 1, 0]),
     #             'sy': np.array([0, 0, 0, 0, 1])}
 
-    # features = {'hc': np.array([1, 0, 0, 0]),
-    #             'mi': np.array([0, 1, 0, 0]),
-    #             'vc': np.array([0, 0, 1, 0]),
-    #             'sy': np.array([0, 0, 0, 1])}
+    features = {'hc': np.array([1, 0, 0, 0]),
+                'mi': np.array([0, 1, 0, 0]),
+                'vc': np.array([0, 0, 1, 0]),
+                'sy': np.array([0, 0, 0, 1])}
 
     # train_transforms = [clouds.RandomVariation((-40, 40)),
     #                     clouds.RandomRotate(apply_flip=True),
@@ -210,34 +210,33 @@ if __name__ == '__main__':
 
     # features = {'sv': 1, 'mi': 2, 'vc': 3, 'syn_ssv': 4}
 
-    features = {'hc': np.array([1])}
+    # features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/',
-                             train_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/abt/',
+                             train_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/train/',
                              sample_num=sample_num,
-                             name=name + f'_cp_cp_q',
+                             name=name + f'_small_co',
                              random_seed=1,
                              class_num=3,
                              train_transforms=[clouds.RandomVariation((-40, 40)), clouds.RandomRotate(apply_flip=True),
                                                clouds.Center(), clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
                                                clouds.RandomScale(distr_scale=0.1, distr='uniform'), clouds.Center()],
                              batch_size=16,
-                             input_channels=1,
+                             input_channels=4,
                              use_val=True,
-                             val_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/evaluation/',
-                             val_freq=30,
-                             features={'hc': np.array([1])},
+                             val_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/',
+                             val_freq=10,
+                             features=features,
                              chunk_size=chunk_size,
                              max_step_size=100000000,
-                             hybrid_mode=True,
+                             hybrid_mode=False,
                              splitting_redundancy=5,
                              norm_type='gn',
-                             label_remove=[2],
-                             label_mappings=[(2, 0), (5, 1), (6, 2)],
-                             val_label_mappings=[(5, 1), (6, 2)],
-                             val_label_remove=[-2, 1, 2, 3, 4],
+                             label_remove=[-2, 0, 2, 5, 6],
+                             label_mappings=[(1, 0), (3, 1), (4, 2)],
+                             val_label_mappings=[(1, 0), (3, 1), (4, 2)],
+                             val_label_remove=[-2, 0, 2, 5, 6],
                              architecture=[{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
-                                           {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
                                            {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
                                            {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
                                            {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
@@ -247,9 +246,9 @@ if __name__ == '__main__':
                                            {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
                                            {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
                                            {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-                                           {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                                            {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}],
-                             target_names=['dendrite', 'neck', 'head'])
+                             target_names=['axon', 'bouton', 'terminal'],
+                             model='ConvAdaptSeg')
     training_thread(argscont)
 
     # clouds.Center(),
