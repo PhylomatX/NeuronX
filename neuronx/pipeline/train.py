@@ -10,13 +10,14 @@ import morphx.processing.clouds as clouds
 from neuronx.classes.torchhandler import TorchHandler
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
+from lightconvpoint.utils.network import get_search, get_conv
 
 elektronn3.select_mpl_backend('Agg')
 from elektronn3.models.convpoint import SegAdapt, SegBig
+from elektronn3.models.lcp_adapt import ConvAdaptSeg
 from elektronn3.training import Trainer3d, Backup
 from neuronx.classes.argscontainer import ArgsContainer
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
-from lightconvpoint.utils import get_network
 
 
 def training_thread(acont: ArgsContainer):
@@ -43,9 +44,9 @@ def training_thread(acont: ArgsContainer):
     if acont.architecture == 'lcp' or acont.model == 'ConvAdaptSeg':
         kwargs = {}
         if acont.model == 'ConvAdaptSeg':
-            kwargs = dict(f_map_num=acont.pl, architecture=acont.architecture, act=acont.act, norm=acont.norm_type)
+            kwargs = dict(kernel_num=acont.pl, architecture=acont.architecture, activation=acont.act, norm=acont.norm_type)
         conv = dict(layer=acont.conv[0], kernel_separation=acont.conv[1])
-        model = get_network(acont.model, acont.input_channels, acont.class_num, conv, acont.search, **kwargs)
+        model = ConvAdaptSeg(acont.input_channels, acont.class_num, get_conv(conv), get_search(acont.search), **kwargs)
         lcp_flag = True
     elif acont.use_big:
         model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=acont.dropout,
@@ -179,8 +180,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 4096
-    chunk_size = 4000
+    sample_num = 8192
+    chunk_size = 8000
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -212,34 +213,34 @@ if __name__ == '__main__':
 
     # features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/abt/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/dasbtnh/',
                              train_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/train/',
                              sample_num=sample_num,
-                             name=name + f'_small_co',
+                             name=name + f'_new_loss_9_classes',
                              random_seed=1,
-                             class_num=3,
+                             class_num=9,
                              train_transforms=[clouds.RandomVariation((-40, 40)), clouds.RandomRotate(apply_flip=True),
                                                clouds.Center(), clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
                                                clouds.RandomScale(distr_scale=0.1, distr='uniform'), clouds.Center()],
-                             batch_size=16,
+                             batch_size=32,
                              input_channels=4,
                              use_val=True,
                              val_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/',
-                             val_freq=10,
+                             val_freq=5,
                              features=features,
                              chunk_size=chunk_size,
                              max_step_size=100000000,
                              hybrid_mode=False,
                              splitting_redundancy=5,
                              norm_type='gn',
-                             label_remove=[-2, 0, 2, 5, 6],
-                             label_mappings=[(1, 0), (3, 1), (4, 2)],
-                             val_label_mappings=[(1, 0), (3, 1), (4, 2)],
-                             val_label_remove=[-2, 0, 2, 5, 6],
+                             label_remove=[-2],
+                             label_mappings=[],
+                             val_label_mappings=[],
+                             val_label_remove=[-2],
                              architecture=[{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
                                            {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
                                            {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
-                                           {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+                                           {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 64},
                                            {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
                                            {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
                                            {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
@@ -247,8 +248,9 @@ if __name__ == '__main__':
                                            {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
                                            {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                                            {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}],
-                             target_names=['axon', 'bouton', 'terminal'],
-                             model='ConvAdaptSeg')
+                             target_names=['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head'],
+                             model='ConvAdaptSeg',
+                             search='SearchQuantized')
     training_thread(argscont)
 
     # clouds.Center(),

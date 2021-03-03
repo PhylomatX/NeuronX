@@ -7,7 +7,7 @@ from neuronx.pipeline.evaluate import get_target_names, handle_unpreds, write_co
 from morphx.processing import objects, basics
 from morphx.classes.pointcloud import PointCloud
 
-red = 1
+red = 5
 
 
 def merge(base: np.ndarray, replace: Dict[int, Tuple[np.ndarray, List[Tuple[int, int]]]]):
@@ -43,7 +43,7 @@ if __name__ == '__main__':
         reports_txt += str(sso_id) + '\n\n'
 
         # 0: axon, 1: bouton, 2: terminal
-        with open(base_path + f'abt/20_09_27_test_eval_red{red}_valiter1_batchsize-1/epoch_180/sso_' + str(sso_id) + '_preds.pkl', 'rb') as f:
+        with open(base_path + f'abt/20_09_27_test_eval_red{red}_valiter1_batchsize-1/epoch_370/sso_' + str(sso_id) + '_preds.pkl', 'rb') as f:
             abt_preds = pkl.load(f)
             abt = objects.load_obj('ce', abt_preds[0])
             abt.set_predictions(abt_preds[1])
@@ -55,7 +55,7 @@ if __name__ == '__main__':
             dnh.set_predictions(dnh_preds[1])
             dnh.generate_pred_labels()
         # 0: dendrite, 1: axon, 2: soma,
-        with open(base_path + f'ads/20_09_27_test_eval_red{red}_valiter1_batchsize-1/epoch_760/sso_' + str(sso_id) + '_preds.pkl', 'rb') as f:
+        with open(base_path + f'ads/20_09_27_test_eval_red{red}_nokdt_valiter1_batchsize-1/epoch_760/sso_' + str(sso_id) + '_preds.pkl', 'rb') as f:
             ads_preds = pkl.load(f)
             ads = objects.load_obj('ce', ads_preds[0])
             ads.set_predictions(ads_preds[1])

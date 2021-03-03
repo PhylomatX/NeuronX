@@ -226,17 +226,23 @@ def generate_diagram(reports_path: str, output_path: str, identifier: List[str],
 
 def generate_diagrams(reports_path: str, output_path: str, identifier: List[str], ident_labels: List[str],
                       points: bool, density: bool, part_key: str = 'mv', filter_identifier: bool = False,
-                      neg_identifier: List[str] = None, time: bool = False):
-    # vertex level, f1_score
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
-                     density=density, filter_identifier=filter_identifier, neg_identifier=neg_identifier, time=time)
+                      neg_identifier: List[str] = None, time: bool = False, class_keys: List[str] = None):
+    if class_keys is None:
+        class_keys = ['macro avg']
+
+    for class_key in class_keys:
+        # vertex level, f1_score
+        generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
+                         density=density, filter_identifier=filter_identifier, neg_identifier=neg_identifier, time=time,
+                         class_key=class_key)
+        # skeleton level, f1_score
+        generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
+                         density=density, filter_identifier=filter_identifier, neg_identifier=neg_identifier, time=time,
+                         class_key=class_key)
     # vertex level, accuracy
     generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key,
                      class_key='accuracy', density=density, filter_identifier=filter_identifier, time=time,
                      neg_identifier=neg_identifier)
-    # skeleton level, f1_score
-    generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
-                     density=density, filter_identifier=filter_identifier, neg_identifier=neg_identifier, time=time)
     # skeleton level, accuracy
     generate_diagram(reports_path, output_path, identifier, ident_labels, points=points, part_key=part_key + '_skel',
                      class_key='accuracy', density=density, filter_identifier=filter_identifier, time=time,

@@ -15,7 +15,8 @@ from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from elektronn3.models.convpoint import SegAdapt, SegBig
 from neuronx.classes.argscontainer import ArgsContainer
-from lightconvpoint.utils import get_network
+from lightconvpoint.utils.network import get_search, get_conv
+from elektronn3.models.lcp_adapt import ConvAdaptSeg
 
 
 @torch.no_grad()
@@ -121,7 +122,21 @@ def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, 
                 # basics.save2pkl(worst, out_path, f'{hc}_i{i}_b{batch}_i{worst_ix}')
 
             # apply argmax to outputs
-            output_np = np.argmax(output_np, axis=2)
+            ads = np.argmax(output_np[:, :, [0, 1, 2]], axis=2)
+            abt = np.argmax(output_np[:, :, [3, 4, 5]], axis=2)
+            abt[abt == 1] = 3
+            abt[abt == 2] = 4
+            abt[abt == 0] = 1
+            dnh = np.argmax(output_np[:, :, [6, 7, 8]], axis=2)
+            dnh[dnh == 1] = 5
+            dnh[dnh == 2] = 6
+
+            full = ads
+            full[full == 0] = dnh[full == 0]
+            full[full == 1] = abt[full == 1]
+            output_np = full
+
+            # output_np = np.argmax(output_np, axis=2)
 
             for j in range(batch_size):
                 if j not in remove:
@@ -176,10 +191,11 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
             kwargs = {}
             if argscont.model == 'ConvAdaptSeg':
-                kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act,
+                kwargs = dict(kernel_num=argscont.pl, architecture=argscont.architecture, activation=argscont.act,
                               norm=argscont.norm_type)
             conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
-            model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
+            model = ConvAdaptSeg(argscont.input_channels, argscont.class_num, get_conv(conv), get_search(argscont.search),
+                                 **kwargs)
             lcp_flag = True
         elif argscont.use_big:
             model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,

@@ -186,7 +186,8 @@ class ChunkHandler:
             exclude_borders: Offset radius (chunk_size - exclude_border) for excluding border regions of chunks from
                 loss calculation.
             rebalance: dict for rebalancing of dataset if certain classes dominate. dict contains factor keyed by labels
-                where the factor indicate how often the labels should get resampled.
+                where the factor indicate how often the labels should get resampled. This was introduced for rebalancing
+                the CMN ads dataset. Now this is outcommented and replaced by a hacky version for terminals.
         """
         if type(data) == SuperSegmentationDataset:
             self._data = data
@@ -330,11 +331,16 @@ class ChunkHandler:
                     for ix in tqdm(range(len(self._chunk_list))):
                         item = self._chunk_list[ix]
                         obj = self._objs[self._obj_names.index(item[0])]
-                        label = int(np.unique(obj.labels)[np.unique(obj.labels) < 4])
-                        balance[label] += 1
-                        for i in range(self._rebalance[label]):
-                            self._chunk_list.append(item)
-                            balance[label] += 1
+                        for key in self._rebalance:
+                            if key in np.unique(obj.labels):
+                                for i in range(self._rebalance[key]):
+                                    self._chunk_list.append(item)
+                                    balance[key] += 1
+                        # label = int(np.unique(obj.labels)[np.unique(obj.labels) < 4])
+                        # balance[label] += 1
+                        # for i in range(self._rebalance[label]):
+                        #     self._chunk_list.append(item)
+                        #     balance[label] += 1
                     print("Done with rebalancing!")
                     print(balance)
                 random.shuffle(self._chunk_list)

@@ -144,26 +144,26 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer =
     if total:
         coverage = total_labels['coverage']
         total_report['cov'] = coverage
-        targets = get_target_names(total_labels['gt'], total_labels['pred'], targets)
+        targets_vertex = get_target_names(total_labels['gt'], total_labels['pred'], targets)
         total_report[mode] = \
-            sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True, target_names=targets)
+            sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True, target_names=targets_vertex)
         total_report_txt += \
             mode + '\n\n' + \
             f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
             f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
-            sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets) + '\n\n'
+            sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets_vertex) + '\n\n'
         cm = sm.confusion_matrix(total_labels['gt'], total_labels['pred'])
-        total_report_txt += write_confusion_matrix(cm, targets) + '\n\n'
+        total_report_txt += write_confusion_matrix(cm, targets_vertex) + '\n\n'
         mode += '_skel'
-        targets = get_target_names(total_labels['gt_node'], total_labels['pred_node'], targets)
+        targets_node = get_target_names(total_labels['gt_node'], total_labels['pred_node'], targets)
         total_report[mode] = \
             sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
-                                     output_dict=True, target_names=targets)
+                                     output_dict=True, target_names=targets_node)
         total_report_txt += \
             mode + '\n\n' + \
-            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'], target_names=targets) + '\n\n'
+            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'], target_names=targets_node) + '\n\n'
         cm_skel = sm.confusion_matrix(total_labels['gt_node'], total_labels['pred_node'])
-        total_report_txt += write_confusion_matrix(cm_skel, targets) + '\n\n'
+        total_report_txt += write_confusion_matrix(cm_skel, targets_node) + '\n\n'
     reports['total'] = total_report
     reports_txt += total_report_txt
     basics.save2pkl(reports, output_path, name=report_name)
@@ -314,7 +314,7 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
 
 if __name__ == '__main__':
     # start full pipeline
-    s_path = '~/working_dir/paper/hierarchy/'
+    s_path = '~/working_dir/paper/dnh_matrix/'
     v_path = '/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/'
     # v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
     # v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
@@ -323,40 +323,20 @@ if __name__ == '__main__':
     # target_names = ['shaft', 'other', 'neck', 'head']
     # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     # target_names = ['dendrite', 'neck', 'head']
-    # target_names = ['dendrite', 'axon', 'soma']
+    target_names = ['dendrite', 'axon', 'soma']
     # target_names = ['axon', 'bouton', 'terminal']
-    target_names = []
-
-    s_paths = ['dnh/']
+    # target_names = []
 
     red = 5
-    for ix, p in enumerate(s_paths):
-        model_max = 700
-        model_freq = 30
-        p = s_path + p
-        print(f"\n\nProcessing {p}")
-        eval_name = f'20_09_27_test_eval_red{red}'
-        full_evaluation_pipe(p, v_path, eval_name=eval_name, pipe_steps=[True, False], val_iter=1, batch_num=-1,
-                             save_worst_examples=False, val_type='multiple_model', specific_model=390, label_remove=[-2],
-                             label_mappings=[], target_names=target_names, redundancy=red, force_split=False,
-                             border_exclusion=0)
-
-        # report_name = eval_name + '_mv'
-        # o_path = p + eval_name + '_valiter1_batchsize-1/'
-        # analyse.summarize_reports(o_path, report_name)
-        # r_path = o_path + report_name + '.pkl'
-        # analyse.generate_diagrams(r_path, o_path, [''], [''], points=False, density=False, part_key='mv',
-        #                           filter_identifier=False, neg_identifier=[], time=True)
-
-    s_paths = ['abt/']
+    s_paths = ['2020_12_05_24000_32768_2/']
 
     for ix, p in enumerate(s_paths):
         model_max = 700
         model_freq = 30
         p = s_path + p
         print(f"\n\nProcessing {p}")
-        eval_name = f'20_09_27_test_eval_red{red}'
+        eval_name = f'test'
         full_evaluation_pipe(p, v_path, eval_name=eval_name, pipe_steps=[True, False], val_iter=1, batch_num=-1,
-                             save_worst_examples=False, val_type='multiple_model', specific_model=180, label_remove=[-2],
-                             label_mappings=[], target_names=target_names, redundancy=red, force_split=False,
+                             save_worst_examples=False, val_type='multiple_model', specific_model=510, label_remove=[-2],
+                             label_mappings=[], target_names=target_names, redundancy=red, force_split=True,
                              border_exclusion=0)
