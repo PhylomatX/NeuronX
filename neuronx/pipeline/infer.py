@@ -1,177 +1,168 @@
 import os
-import glob
 import math
 import torch
-import time
-import pickle
 import random
+import warnings
 import numpy as np
 from tqdm import tqdm
-from torch import nn
 from typing import List, Tuple
-from morphx.processing import clouds, basics
+from morphx.processing import clouds
 from neuronx.classes.torchhandler import TorchHandler
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
-from elektronn3.models.convpoint import SegAdapt, SegBig
 from neuronx.classes.argscontainer import ArgsContainer
 from lightconvpoint.utils.network import get_search, get_conv
 from elektronn3.models.lcp_adapt import ConvAdaptSeg
 
 
 @torch.no_grad()
-def validate_single(th: TorchHandler, hc: str, batch_size: int, point_num: int, iter_num: int,
-                    device: torch.device, model, pm: PredictionMapper, input_channels: int,
-                    out_path: str = None, sampling: bool = True, lcp_flag: bool = False):
-    """ Can be used to validate single objects. Returns timing for chunk generation, prediction and mapping. """
-    chunk_timing = [0, 0]
-    model_timing = [0, 0]
-    map_timing = [0, 0]
-    batch_num = math.ceil(th.get_obj_length(hc) / batch_size)
-    criterion = torch.nn.CrossEntropyLoss()
+def predict_cell(data_loader: TorchHandler,
+                 cell: str,
+                 batch_size: int,
+                 point_num: int,
+                 prediction_redundancy: int,
+                 device: torch.device,
+                 model,
+                 prediction_mapper: PredictionMapper,
+                 input_channels: int,
+                 point_subsampling: bool = True,
+                 multi_task_learning: bool = True):
+    """
+    Can be used to generate predictions for single cells using a pre-loaded model.
 
-    for i in range(iter_num):
+    data_loader: see TorchHandler class.
+    cell: cell identifier.
+    batch_size: batch size.
+    point_num: number of points in each chunk.
+    prediction_redundancy: number of times each cell should be processed (using the same chunks but different points due to random sampling).
+    device: cuda or cpu.
+    model: pre-loaded PyTorch model.
+    prediction_mapper: See PredictionMapper class.
+    input_channels: number of input features.
+    point_subsampling: sample random points from extracted cell chunks.
+    multi_task_learning: process outputs from model which uses multi-task learning (3 tasks in one). This option is currently hardcoded and
+        requires fixed ordering of all classes.
+    """
+    batch_num = math.ceil(data_loader.get_obj_length(cell) / batch_size)
+
+    for i in range(prediction_redundancy):
         for batch in tqdm(range(batch_num)):
-            if not sampling:
-                start = time.time()
-                sample = th[(hc, batch * batch_size)]
-                chunk_timing[0] += time.time() - start
-                chunk_timing[1] += 1
-                point_num = len(sample['pts'])
+            # --- prepare batches ---
+            if not point_subsampling:
+                # for point_subsampling == False, the batch_size is always 1 as the samples have different sizes
+                # => determine the number of points in the next chunk.
+                cell_chunk = data_loader[(cell, batch * batch_size)]
+                point_num = len(cell_chunk['pts'])
             pts = torch.zeros((batch_size, point_num, 3))
             features = torch.ones((batch_size, point_num, input_channels))
             mapping_idcs = torch.ones((batch_size, point_num))
-            o_mask = torch.zeros((batch_size, point_num, th.num_classes))
-            l_mask = torch.zeros((batch_size, point_num))
+            prediction_mask = torch.zeros((batch_size, point_num))
             targets = torch.zeros((batch_size, point_num))
-            fill_up = 0
-            sample_number = 0
+
+            # --- fill batches ---
+            fill_up_ix = 0
+            fill_up_start_ix = 0
             remove = []
             for j in range(batch_size):
-                # for sampling == False, the batch_size is always 1 as the samples have different sizes.
-                if sampling:
-                    start = time.time()
-                    sample = th[(hc, batch * batch_size + j)]
-                    chunk_timing[0] += time.time() - start
-                    chunk_timing[1] += 1
-                    # fill up empty batches (happening when all parts of current cell have been processed).
-                    # The fill up samples are always build by the first parts of the current cell (thus fill_up = 0)
-                    # and will be removed later
-                    if torch.all(sample['pts'] == 0):
-                        if sample_number == 0:
-                            sample_number = j
-                        sample = th[(hc, fill_up)]
-                        fill_up = (fill_up + 1) % sample_number
+                if point_subsampling:
+                    cell_chunk = data_loader[(cell, batch * batch_size + j)]
+                    # fill up empty batches with first chunks from current cell
+                    if torch.all(cell_chunk['pts'] == 0):
+                        if fill_up_start_ix == 0:
+                            fill_up_start_ix = j
+                        cell_chunk = data_loader[(cell, fill_up_ix)]
+                        fill_up_ix = (fill_up_ix + 1) % fill_up_start_ix
                         remove.append(j)
-                pts[j] = sample['pts']
-                features[j] = sample['features']
-                mapping_idcs[j] = sample['map']
-                o_mask[j] = sample['o_mask']
-                l_mask[j] = sample['l_mask']
-                targets[j] = sample['target']
+                pts[j] = cell_chunk['pts']
+                features[j] = cell_chunk['features']
+                mapping_idcs[j] = cell_chunk['map']
+                prediction_mask[j] = cell_chunk['l_mask']
+                targets[j] = cell_chunk['target']
 
-            # apply model to batch of samples
-            if lcp_flag:
-                pts = pts.transpose(1, 2)
-                features = features.transpose(1, 2)
-
+            # --- apply model to batches (LightConvPoint requires transpose) ---
+            pts = pts.transpose(1, 2)
+            features = features.transpose(1, 2)
             pts = pts.to(device, non_blocking=True)
             features = features.to(device, non_blocking=True)
-            start = time.time()
             outputs = model(features, pts)
-            model_timing[0] += time.time() - start
-            model_timing[1] += 1
+            pts = pts.transpose(1, 2)
+            outputs = outputs.transpose(1, 2)
 
-            if lcp_flag:
-                pts = pts.transpose(1, 2)
-                features = features.transpose(1, 2)
-                outputs = outputs.transpose(1, 2)
-
-            # convert all tensors to numpy arrays
             pts = pts.cpu().detach().numpy()
-            features = features.cpu().detach().numpy()
-
-            l_mask = l_mask.numpy().astype(bool)
-            o_mask = o_mask.numpy().astype(bool)
-            targets = targets.numpy()
+            prediction_mask = prediction_mask.numpy().astype(bool)
             mapping_idcs = mapping_idcs.numpy()
             output_np = outputs.cpu().detach().numpy()
 
-            # save bad examples
-            if out_path is not None:
-                t_loss = 0
-                worst_ix = 0
-                for j in range(batch_size):
-                    if np.random.random() < 1 and '80035' in hc:
-                        if j not in remove:
-                            curr_output = output_np[j][o_mask[j]].reshape(-1, th.num_classes)
-                            curr_target = targets[j][l_mask[j]].astype(int)
-                            loss = criterion(torch.from_numpy(curr_output), torch.from_numpy(curr_target))
-                            if loss > t_loss:
-                                worst_ix = j
-                                t_loss = loss
-                            curr_output = np.argmax(curr_output, axis=1)
-                            target_curr = PointCloud(pts[j], targets[j], features=features[j])
-                            output_curr = PointCloud(pts[j][l_mask[j].astype(bool)], curr_output)
-                            curr = [target_curr, output_curr]
-                            basics.save2pkl(curr, out_path, f'{hc}_i{i}_idx{batch * batch_size + j}')
-                # worst_output = np.argmax(output_np[worst_ix][o_mask[worst_ix]].reshape(-1, th.num_classes), axis=1)
-                # target_cloud = PointCloud(pts[worst_ix], targets[worst_ix])
-                # output_cloud = PointCloud(pts[worst_ix][l_mask[worst_ix].astype(bool)], worst_output)
-                # worst = [target_cloud, output_cloud]
-                # basics.save2pkl(worst, out_path, f'{hc}_i{i}_b{batch}_i{worst_ix}')
+            # --- reduce model outputs to predictions ---
+            if multi_task_learning:
+                # ads = axon, dendrite, soma / abt = axon, bouton, terminal / dnh = dendrite, neck, head
+                ads = np.argmax(output_np[:, :, [0, 1, 2]], axis=2)
+                abt = np.argmax(output_np[:, :, [3, 4, 5]], axis=2)
+                abt[abt == 1] = 3
+                abt[abt == 2] = 4
+                abt[abt == 0] = 1
+                dnh = np.argmax(output_np[:, :, [6, 7, 8]], axis=2)
+                dnh[dnh == 1] = 5
+                dnh[dnh == 2] = 6
+                full = ads
+                full[full == 0] = dnh[full == 0]
+                full[full == 1] = abt[full == 1]
+                output_np = full
+            else:
+                output_np = np.argmax(output_np, axis=2)
 
-            # apply argmax to outputs
-            ads = np.argmax(output_np[:, :, [0, 1, 2]], axis=2)
-            abt = np.argmax(output_np[:, :, [3, 4, 5]], axis=2)
-            abt[abt == 1] = 3
-            abt[abt == 2] = 4
-            abt[abt == 0] = 1
-            dnh = np.argmax(output_np[:, :, [6, 7, 8]], axis=2)
-            dnh[dnh == 1] = 5
-            dnh[dnh == 2] = 6
-
-            full = ads
-            full[full == 0] = dnh[full == 0]
-            full[full == 1] = abt[full == 1]
-            output_np = full
-
-            # output_np = np.argmax(output_np, axis=2)
-
+            # --- map chunk predictions back to full cell ---
             for j in range(batch_size):
+                # remove chunks which were used to fill up the batch
                 if j not in remove:
-                    start = time.time()
                     # filter the points of the outputs which should get a prediction
-                    curr_pts = pts[j]
-                    curr_out = output_np[j]
-                    curr_map = mapping_idcs[j]
-                    curr_mask = l_mask[j]
-                    curr_pts = curr_pts[curr_mask]
-                    curr_out = curr_out[curr_mask]
-                    curr_map = curr_map[curr_mask]
-                    # map predictions to original cloud
+                    curr_mask = prediction_mask[j]
+                    curr_pts = pts[j][curr_mask]
+                    curr_out = output_np[j][curr_mask]
+                    curr_map = mapping_idcs[j][curr_mask]
                     prediction = PointCloud(curr_pts, curr_out)
-                    pm.map_predictions(prediction, curr_map, hc, batch * batch_size + j, sampling=sampling)
-                    map_timing[0] += time.time() - start
-                    map_timing[1] += 1
-
-    return chunk_timing[0] / chunk_timing[1], model_timing[0] / model_timing[1], map_timing[0] / map_timing[1]
+                    prediction_mapper.map_predictions(prediction, curr_map, cell, batch * batch_size + j,
+                                                      sampling=point_subsampling)
 
 
-def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_path: str,
-               model_type: str = 'state_dict.pth', val_iter: int = 1, batch_num: int = -1,
-               cloud_out_path: str = None, redundancy: int = -1, force_split: bool = False, same_seeds: bool = False,
-               label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
-               border_exclusion: int = 0, model = None):
-    training_path = os.path.expanduser(training_path)
-    val_path = os.path.expanduser(val_path)
-    out_path = os.path.expanduser(out_path)
+def generate_predictions_with_model(argscont: ArgsContainer,
+                                    model_path: str,
+                                    cell_path: str,
+                                    out_path: str,
+                                    prediction_redundancy: int = 1,
+                                    batch_size: int = -1,
+                                    chunk_redundancy: int = -1,
+                                    force_split: bool = False,
+                                    training_seed: bool = False,
+                                    label_mappings: List[Tuple[int, int]] = None,
+                                    label_remove: List[int] = None,
+                                    border_exclusion: int = 0,
+                                    state_dict: str = None,
+                                    model=None):
+    """
+    Can be used to generate predictions for multiple files using a specific model (either passed as path to state_dict or as pre-loaded model).
+
+    argscont: argument container for current model.
+    model_path: path to model state dict.
+    data_path: path to cells used for prediction.
+    out_path: path to folder where predictions of this model should get saved.
+    prediction_redundancy: number of times each cell should be processed (using the same chunks but different points due to random sampling).
+    batch_num: batch size, if -1 this defaults to the batch size used during training.
+    chunk_redundancy: number of times each cell should get splitted into a complete chunk set (including different chunks each time).
+    force_split: split cells even if cached split information exists.
+    same_seeds: use random seed from training.
+    label_mappings: List of tuples like (from, to) where 'from' is label which should get mapped to 'to'.
+        Defaults to label_mappings from training or to val_label_mappings of ArgsContainer.
+    label_remove: List of labels to remove from the cells. Defaults to label_remove from training or to val_label_remove of ArgsContainer.
+    border_exclusion: nm distance which defines how much of the chunk borders should be excluded from predictions.
+    state_dict: state dict holding model for prediction.
+    model: loaded model to use for prediction.
+    """
     if os.path.exists(out_path):
         print(f"{out_path} already exists. Skipping...")
         return
 
-    if same_seeds:
-        # set random seeds to ensure compareability
+    if training_seed:
         torch.manual_seed(argscont.random_seed)
         np.random.seed(argscont.random_seed)
         random.seed(argscont.random_seed)
@@ -181,53 +172,29 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
     else:
         device = torch.device('cpu')
 
-    lcp_flag = False
-    if model_type == 'loaded':
+    if model is not None:
         model = model
-        if argscont.model == 'ConvAdaptSeg':
-            lcp_flag = True
     else:
-        # load model
-        if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
-            kwargs = {}
-            if argscont.model == 'ConvAdaptSeg':
-                kwargs = dict(kernel_num=argscont.pl, architecture=argscont.architecture, activation=argscont.act,
-                              norm=argscont.norm_type)
-            conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
-            model = ConvAdaptSeg(argscont.input_channels, argscont.class_num, get_conv(conv), get_search(argscont.search),
-                                 **kwargs)
-            lcp_flag = True
-        elif argscont.use_big:
-            model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
-                           use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
-                           kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
-                           reductions=argscont.reductions, first_layer=argscont.first_layer,
-                           padding=argscont.padding, nn_center=argscont.nn_center, centroids=argscont.centroids,
-                           pl=argscont.pl, normalize=argscont.cp_norm)
-        else:
-            print("Adaptable model was found!")
-            model = SegAdapt(argscont.input_channels, argscont.class_num, architecture=argscont.architecture,
-                             trs=argscont.track_running_stats, dropout=argscont.dropout, use_bias=argscont.use_bias,
-                             norm_type=argscont.norm_type, kernel_size=argscont.kernel_size, padding=argscont.padding,
-                             nn_center=argscont.nn_center, centroids=argscont.centroids, kernel_num=argscont.pl,
-                             normalize=argscont.cp_norm, act=argscont.act)
+        kwargs = {}
+        if argscont.model == 'ConvAdaptSeg':
+            kwargs = dict(kernel_num=argscont.pl, architecture=argscont.architecture, activation=argscont.act,
+                          norm=argscont.norm_type)
+        conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
+        model = ConvAdaptSeg(argscont.input_channels, argscont.class_num, get_conv(conv), get_search(argscont.search),
+                             **kwargs)
         try:
-            full = torch.load(training_path + model_type)
+            full = torch.load(model_path + state_dict)
             model.load_state_dict(full)
         except RuntimeError:
             model.load_state_dict(full['model_state_dict'])
         model.to(device)
         model.eval()
 
-    # set up environment
-    chunk_times = []
-    map_times = []
-    model_times = []
-    total_times = []
     transforms = clouds.Compose(argscont.val_transforms)
-
-    if redundancy == -1:
-        redundancy = argscont.splitting_redundancy
+    if chunk_redundancy == -1:
+        chunk_redundancy = argscont.splitting_redundancy
+    if batch_size == -1:
+        batch_size = argscont.batch_size
     if label_remove is None:
         if argscont.val_label_remove is not None:
             label_remove = argscont.val_label_remove
@@ -239,189 +206,99 @@ def validation(argscont: ArgsContainer, training_path: str, val_path: str, out_p
         else:
             label_mappings = argscont.label_mappings
 
-    th = TorchHandler(val_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
-                      bio_density=argscont.bio_density, tech_density=argscont.tech_density, transform=transforms,
-                      specific=True, obj_feats=argscont.features, ctx_size=argscont.chunk_size,
-                      label_mappings=label_mappings, hybrid_mode=argscont.hybrid_mode,
-                      feat_dim=argscont.input_channels, splitting_redundancy=redundancy,
-                      label_remove=label_remove, sampling=argscont.sampling,
-                      force_split=force_split, padding=argscont.padding, exclude_borders=border_exclusion)
-    pm = PredictionMapper(val_path, out_path, th.splitfile, label_remove=label_remove, hybrid_mode=argscont.hybrid_mode)
+    torch_handler = TorchHandler(cell_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
+                                 bio_density=argscont.bio_density, tech_density=argscont.tech_density,
+                                 transform=transforms,
+                                 specific=True, obj_feats=argscont.features, ctx_size=argscont.chunk_size,
+                                 label_mappings=label_mappings, hybrid_mode=argscont.hybrid_mode,
+                                 feat_dim=argscont.input_channels, splitting_redundancy=chunk_redundancy,
+                                 label_remove=label_remove, sampling=argscont.sampling,
+                                 force_split=force_split, padding=argscont.padding, exclude_borders=border_exclusion)
+    prediction_mapper = PredictionMapper(cell_path, out_path, torch_handler.splitfile, label_remove=label_remove,
+                                         hybrid_mode=argscont.hybrid_mode)
 
-    if batch_num == -1:
-        batch_size = argscont.batch_size
-    else:
-        batch_size = batch_num
-
-    attr_dicts = {obj: None for obj in th.obj_names}
-    # perform validation
     obj = None
-    obj_names = th.obj_names.copy()
-    for obj in th.obj_names:
-        # skip trainings where validation has already been generated
+    obj_names = torch_handler.obj_names.copy()
+    for obj in torch_handler.obj_names:
         if os.path.exists(out_path + obj + '_preds.pkl'):
             print(obj + " has already been processed. Skipping...")
             obj_names.remove(obj)
             continue
-        if th.get_obj_length(obj) == 0:
+        if torch_handler.get_obj_length(obj) == 0:
             print(obj + " has no chunks to process. Skipping...")
             obj_names.remove(obj)
             continue
         print(f"Processing {obj}")
-        attr_dict = th.get_obj_info(obj, hybrid_only=True)
-        start = time.time()
-        chunk_timing, model_timing, map_timing = \
-            validate_single(th, obj, batch_size, argscont.sample_num, val_iter, device, model, pm,
-                            argscont.input_channels, out_path=cloud_out_path, sampling=argscont.sampling,
-                            lcp_flag=lcp_flag)
-        total_timing = time.time() - start
-        attr_dict['timing'] = total_timing
-        attr_dicts[obj] = attr_dict
-        total_times.append(total_timing)
-        chunk_times.append(chunk_timing)
-        model_times.append(model_timing)
-        map_times.append(map_timing)
+        predict_cell(torch_handler, obj, batch_size, argscont.sample_num, prediction_redundancy, device, model,
+                     prediction_mapper, argscont.input_channels, point_subsampling=argscont.sampling)
     if obj is not None:
-        pm.save_prediction()
+        prediction_mapper.save_prediction()
     else:
-        return 
-
-    # save timing results and object information
-    if os.path.exists(out_path + 'obj_info.pkl'):
-        with open(out_path + 'obj_info.pkl', 'rb') as f:
-            attr_dict = pickle.load(f)
-            attr_dict.update(attr_dicts)
-            pickle.dump(attr_dict, f)
-        f.close()
-    else:
-        with open(out_path + 'obj_info.pkl', 'wb') as f:
-            pickle.dump(attr_dicts, f)
-        f.close()
-
-    with open(out_path + 'timing.txt', 'a') as f:
-        f.write('\nModel timing:\n\n')
-        for idx, item in enumerate(obj_names):
-            f.write(f'{item}: \t\t {model_times[idx]} s.\n')
-        f.write('\nChunk timing:\n\n')
-        for idx, item in enumerate(obj_names):
-            f.write(f'{item}: \t\t {chunk_times[idx]} s.\n')
-        f.write('\nMapping timing:\n\n')
-        for idx, item in enumerate(obj_names):
-            f.write(f'{item}: \t\t {map_times[idx]} s.\n')
-        f.write('\nTotal timing:\n\n')
-        for idx, item in enumerate(obj_names):
-            f.write(f'{item}: \t\t {total_times[idx]} s.\n')
-        f.close()
-
+        return
     argscont.save2pkl(out_path + 'argscont.pkl')
-
-    # free CUDA memory
     del model
     torch.cuda.empty_cache()
 
 
-def validate_training_set(set_path: str, val_path: str, out_path: str, model_type: str = 'state_dict.pth',
-                          val_iter: int = 1, batch_num: int = -1, cloud_out_path: str = None, redundancy: int = -1,
-                          force_split: bool = False, model=None):
-    """ Validate multiple trainings.
+def generate_predictions_from_training(train_path: str,
+                                       cell_path: str,
+                                       out_path: str,
+                                       model_freq: int,
+                                       model_min: int = 0,
+                                       model_max: int = 500,
+                                       specific_model: int = None,
+                                       model=None,
+                                       **args):
+    """
+    Can be used to generate predictions for the files in `cell_path` using models of the training specified by `train_path`.
+
+    Three modes:
+        + multi-model prediction: Generate predictions for all models within epoch range (specific_model, model = None)
+        + single-model prediction: Generate predictions using specific epoch model (model = None, specific_model = epoch number)
+        + loaded model prediction: Generate predictions using model that has already been loaded (model = loaded PyTorch model)
+
+    For multi-model and single-model prediction, `train_path` must contain a 'models' folder where models exist as state dicts
+    in the format: 'state_dict_e{epoch_number}.pth'
 
     Args:
-        set_path: path where the trainings are located.
-        val_path: path to cell files on which the trained models should get validated.
-        out_path: path where validation folders should get saved.
-        model_type: name of model file which should be used.
-        val_iter: number of validation iterations.
-        batch_num: Batch size in inference mode can be larger than during training. Default is same as during training.
-        cloud_out_path: Path to save worst inference examples
+        train_path: path to training folder.
+        cell_path: path to cells used for prediction.
+        out_path: path where predictions should be saved.
+        model_freq: predictions are generated with each model in epoch range (model_min, model_max, model_freq).
+        model_min: lower bound of model_freq.
+        model_max: higher bound of model_freq.
+        specific_model: epoch number of model which should be used for prediction.
+        model: loaded model to use for prediction.
     """
-    set_path = os.path.expanduser(set_path)
-    val_path = os.path.expanduser(val_path)
-    out_path = os.path.expanduser(out_path)
-    dirs = os.listdir(set_path)
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
-    for di in dirs:
-        print(f"Processing {di}")
-        if not os.path.isdir(set_path + di):
-            continue
-        if os.path.exists(set_path + di + '/argscont.pkl'):
-            argscont = ArgsContainer().load_from_pkl(set_path + di + '/argscont.pkl')
-        else:
-            print("No arguments found for this training. Skipping...")
-            continue
-        if cloud_out_path is not None:
-            curr_out_path = cloud_out_path + di + '/examples/'
-        else:
-            curr_out_path = None
-        validation(argscont, set_path + di + '/', val_path, out_path + di + '/', model_type=model_type,
-                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                   force_split=force_split, model=model)
-
-
-def validate_multi_model_training(training_path: str, val_path: str, out_path: str, model_freq: int,
-                                  model_min: int = None, val_iter: int = 1, batch_num: int = -1,
-                                  cloud_out_path: str = None, specific_model: int = None, redundancy: int = -1,
-                                  force_split: bool = False, model_max: int = None,
-                                  label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None,
-                                  same_seeds: bool = False, border_exclusion: int = 0, model = None):
-    """ Can be used to validate every model_freq file where all the models are saved in set_path as torch state dicts
-        with the format: 'state_dict_e{epoch_number}.pth'.
-
-    Args:
-        training_path: path where the trainings are located.
-        val_path: path to cell files on which the trained models should get validated.
-        out_path: path where validation folder should get saved.
-        model_freq: Every model_freq state_dict at the set_path gets evaluated.
-        val_iter: number of validation iterations.
-        batch_num: Batch size in inference mode can be larger than during training. Default is same as during training.
-        cloud_out_path: Path to save worst inference examples.
-    """
-    training_path = os.path.expanduser(training_path)
-    val_path = os.path.expanduser(val_path)
+    train_path = os.path.expanduser(train_path)
+    cell_path = os.path.expanduser(cell_path)
     out_path = os.path.expanduser(out_path)
     if not os.path.exists(out_path):
         os.makedirs(out_path)
-    # load argument container
-    if os.path.exists(training_path + '/argscont.pkl'):
-        argscont = ArgsContainer().load_from_pkl(training_path + '/argscont.pkl')
+    if os.path.exists(train_path + '/argscont.pkl'):
+        argscont = ArgsContainer().load_from_pkl(train_path + '/argscont.pkl')
     else:
-        print("No argument container found for this training.")
+        warnings.warn("No argument container found. Skipping.")
         return
-    # prepare for saving worst examples
-    if cloud_out_path is not None:
-        curr_out_path = cloud_out_path + '/examples/'
+    if model is not None:
+        # inference with model that has already been loaded and passed as 'model'
+        generate_predictions_with_model(argscont, '', cell_path, out_path + f'epoch_{specific_model}' + '/',
+                                        model=model, **args)
     else:
-        curr_out_path = None
-    if model is None:
-        # validate different models
-        model_path = training_path + 'models/'
+        # inference using models from 'models' folder
+        model_path = train_path + 'models/'
         if not os.path.exists(model_path):
-            print("Model folder was not found in training. The folder must be named 'models'.")
+            warnings.warn("Model folder does not exist. The folder must be named 'models'. Skipping.")
             return
-        models = glob.glob(model_path + 'state_dict_*')
-        models.sort()
-        if specific_model is None:
-            if model_min is None:
-                model_min = 0
-            if model_max is None:
-                model_max = 500
+        if specific_model is not None:
+            # inference with specific model from 'models' folder, represented by its epoch number
+            state_dict = f'state_dict_e{specific_model}.pth'
+            generate_predictions_with_model(argscont, model_path, cell_path, out_path + f'epoch_{specific_model}' + '/',
+                                            state_dict=state_dict, **args)
+        else:
+            # inference with all models from 'models' folder which are in the range described by model_min, model_max, model_freq
             model_idcs = np.arange(model_min, model_max, model_freq)
             for ix in model_idcs:
-                model_type = f'state_dict_e{ix}.pth'
-                if curr_out_path is not None:
-                    curr_out_path += f'epoch_{ix}/'
-                validation(argscont, model_path, val_path, out_path + f'epoch_{ix}' + '/', model_type=model_type,
-                           val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                           force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
-                           same_seeds=same_seeds, border_exclusion=border_exclusion)
-        else:
-            model_type = f'state_dict_e{specific_model}.pth'
-            validation(argscont, model_path, val_path, out_path + f'epoch_{specific_model}' + '/', model_type=model_type,
-                       val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                       force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
-                       same_seeds=same_seeds, border_exclusion=border_exclusion)
-    else:
-        validation(argscont, '', val_path, out_path + f'epoch_{specific_model}' + '/', model_type='loaded',
-                   val_iter=val_iter, batch_num=batch_num, cloud_out_path=curr_out_path, redundancy=redundancy,
-                   force_split=force_split, label_mappings=label_mappings, label_remove=label_remove,
-                   same_seeds=same_seeds, border_exclusion=border_exclusion, model=model)
+                state_dict = f'state_dict_e{ix}.pth'
+                generate_predictions_with_model(argscont, model_path, cell_path, out_path + f'epoch_{ix}' + '/',
+                                                state_dict=state_dict, **args)

@@ -213,10 +213,10 @@ if __name__ == '__main__':
 
     # features = {'hc': np.array([1])}
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/dasbtnh/',
-                             train_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/train/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/',
+                             train_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/small/',
                              sample_num=sample_num,
-                             name=name + f'_nokdt_fps',
+                             name=name + f'_test',
                              random_seed=1,
                              class_num=9,
                              train_transforms=[clouds.RandomVariation((-40, 40)), clouds.RandomRotate(apply_flip=True),
@@ -225,13 +225,13 @@ if __name__ == '__main__':
                              batch_size=16,
                              input_channels=4,
                              use_val=True,
-                             val_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/',
+                             val_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/small/',
                              val_freq=5,
                              features=features,
                              chunk_size=chunk_size,
                              max_step_size=100000000,
                              hybrid_mode=False,
-                             splitting_redundancy=6,
+                             splitting_redundancy=1,
                              norm_type='gn',
                              label_remove=[-2],
                              label_mappings=[],
@@ -255,20 +255,3 @@ if __name__ == '__main__':
                              model='ConvAdaptSeg',
                              search='SearchFPS')
     training_thread(argscont)
-
-    # clouds.Center(),
-    # clouds.ElasticTransform(sigma=(3.5, 4.5), alpha=(30000, 50000))
-
-# [dict(ic=-1, oc=1, ks=16, nn=32, np=-1),
-#                                            dict(ic=1, oc=1, ks=16, nn=32, np=2048),
-#                                            dict(ic=1, oc=1, ks=16, nn=32, np=1024),
-#                                            dict(ic=1, oc=1, ks=16, nn=32, np=256),
-#                                            dict(ic=1, oc=2, ks=16, nn=32, np=64),
-#                                            dict(ic=2, oc=2, ks=16, nn=16, np=16),
-#                                            dict(ic=2, oc=2, ks=16, nn=8, np=8),
-#                                            dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-#                                            dict(ic=4, oc=2, ks=16, nn=4, np='d'),
-#                                            dict(ic=4, oc=1, ks=16, nn=8, np='d'),
-#                                            dict(ic=2, oc=1, ks=16, nn=16, np='d'),
-#                                            dict(ic=2, oc=1, ks=16, nn=16, np='d'),
-#                                            dict(ic=2, oc=1, ks=16, nn=16, np='d')],

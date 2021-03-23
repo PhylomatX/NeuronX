@@ -71,7 +71,6 @@ class TorchHandler(data.Dataset):
         return len(self._ch)
 
     def __getitem__(self, item: Union[int, Tuple[str, int]]):
-        # TODO: Improve handling of empty pointclouds
         # Get new sample from base dataloader, skip samples without any points
         ixs = np.empty(0)
         sample = None

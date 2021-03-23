@@ -292,19 +292,11 @@ def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', 
         f.write(str(locals()))
     if pipe_steps[0]:
         # run validations
-        if val_type == 'training_set':
-            infer.validate_training_set(set_path, val_path, out_path, model_type='state_dict.pth', val_iter=val_iter,
-                                        batch_num=batch_num, cloud_out_path=cloud_out_path, redundancy=redundancy,
-                                        force_split=force_split, model=model)
-        elif val_type == 'multiple_model':
-            infer.validate_multi_model_training(set_path, val_path, out_path, model_freq, val_iter=val_iter,
-                                                batch_num=batch_num, cloud_out_path=cloud_out_path,
-                                                specific_model=specific_model, redundancy=redundancy,
-                                                force_split=force_split, model_max=model_max, model_min=model_min,
-                                                label_mappings=label_mappings, label_remove=label_remove,
-                                                same_seeds=same_seeds, border_exclusion=border_exclusion, model=model)
-        else:
-            raise ValueError("val_type not known.")
+        infer.generate_predictions_from_training(set_path, val_path, out_path, model_freq, model_min=model_min,
+                                                 prediction_redundancy=val_iter, batch_size=batch_num, specific_model=specific_model,
+                                                 chunk_redundancy=redundancy, force_split=force_split, model_max=model_max,
+                                                 label_mappings=label_mappings, label_remove=label_remove,
+                                                 training_seed=same_seeds, border_exclusion=border_exclusion, model=model)
     if pipe_steps[1]:
         # evaluate validations
         eval_validation_set(out_path, total=total, mode=mode, filters=filters, drop_unpreds=drop_unpreds,
