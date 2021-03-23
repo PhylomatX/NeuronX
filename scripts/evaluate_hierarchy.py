@@ -3,7 +3,7 @@ import pickle as pkl
 import numpy as np
 import sklearn.metrics as sm
 from typing import Dict, Tuple, List
-from neuronx.pipeline.evaluate import get_target_names, handle_unpreds, write_confusion_matrix
+from neuronx.pipeline.evaluate import get_target_names, remove_points_without_prediction, write_confusion_matrix
 from morphx.processing import objects, basics
 from morphx.classes.pointcloud import PointCloud
 
@@ -75,8 +75,8 @@ if __name__ == '__main__':
         pc = PointCloud(vertices=verts, labels=labels)
         pc.save2pkl(base_path + f'/merged/merged_{sso_id}.pkl')
 
-        gtl, hcl = handle_unpreds(hc.labels, hc.pred_labels, True)
-        gtnl, hcnl = handle_unpreds(hc.node_labels, hc.pred_node_labels, True)
+        gtl, hcl = remove_points_without_prediction(hc.labels, hc.pred_labels, True)
+        gtnl, hcnl = remove_points_without_prediction(hc.node_labels, hc.pred_node_labels, True)
 
         sso_report = {}
         mode = 'mv'

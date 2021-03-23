@@ -30,18 +30,19 @@ def predict_cell(data_loader: TorchHandler,
     """
     Can be used to generate predictions for single cells using a pre-loaded model.
 
-    data_loader: see TorchHandler class.
-    cell: cell identifier.
-    batch_size: batch size.
-    point_num: number of points in each chunk.
-    prediction_redundancy: number of times each cell should be processed (using the same chunks but different points due to random sampling).
-    device: cuda or cpu.
-    model: pre-loaded PyTorch model.
-    prediction_mapper: See PredictionMapper class.
-    input_channels: number of input features.
-    point_subsampling: sample random points from extracted cell chunks.
-    multi_task_learning: process outputs from model which uses multi-task learning (3 tasks in one). This option is currently hardcoded and
-        requires fixed ordering of all classes.
+    Args:
+        data_loader: see TorchHandler class.
+        cell: cell identifier.
+        batch_size: batch size.
+        point_num: number of points in each chunk.
+        prediction_redundancy: number of times each cell should be processed (using the same chunks but different points due to random sampling).
+        device: cuda or cpu.
+        model: pre-loaded PyTorch model.
+        prediction_mapper: See PredictionMapper class.
+        input_channels: number of input features.
+        point_subsampling: sample random points from extracted cell chunks.
+        multi_task_learning: process outputs from model which uses multi-task learning (3 tasks in one). This option is currently hardcoded and
+            requires fixed ordering of all classes.
     """
     batch_num = math.ceil(data_loader.get_obj_length(cell) / batch_size)
 
@@ -138,25 +139,27 @@ def generate_predictions_with_model(argscont: ArgsContainer,
                                     label_remove: List[int] = None,
                                     border_exclusion: int = 0,
                                     state_dict: str = None,
-                                    model=None):
+                                    model=None,
+                                    **args):
     """
     Can be used to generate predictions for multiple files using a specific model (either passed as path to state_dict or as pre-loaded model).
 
-    argscont: argument container for current model.
-    model_path: path to model state dict.
-    data_path: path to cells used for prediction.
-    out_path: path to folder where predictions of this model should get saved.
-    prediction_redundancy: number of times each cell should be processed (using the same chunks but different points due to random sampling).
-    batch_num: batch size, if -1 this defaults to the batch size used during training.
-    chunk_redundancy: number of times each cell should get splitted into a complete chunk set (including different chunks each time).
-    force_split: split cells even if cached split information exists.
-    same_seeds: use random seed from training.
-    label_mappings: List of tuples like (from, to) where 'from' is label which should get mapped to 'to'.
-        Defaults to label_mappings from training or to val_label_mappings of ArgsContainer.
-    label_remove: List of labels to remove from the cells. Defaults to label_remove from training or to val_label_remove of ArgsContainer.
-    border_exclusion: nm distance which defines how much of the chunk borders should be excluded from predictions.
-    state_dict: state dict holding model for prediction.
-    model: loaded model to use for prediction.
+    Args:
+        argscont: argument container for current model.
+        model_path: path to model state dict.
+        cell_path: path to cells used for prediction.
+        out_path: path to folder where predictions of this model should get saved.
+        prediction_redundancy: number of times each cell should be processed (using the same chunks but different points due to random sampling).
+        batch_size: batch size, if -1 this defaults to the batch size used during training.
+        chunk_redundancy: number of times each cell should get splitted into a complete chunk set (including different chunks each time).
+        force_split: split cells even if cached split information exists.
+        training_seed: use random seed from training.
+        label_mappings: List of tuples like (from, to) where 'from' is label which should get mapped to 'to'.
+            Defaults to label_mappings from training or to val_label_mappings of ArgsContainer.
+        label_remove: List of labels to remove from the cells. Defaults to label_remove from training or to val_label_remove of ArgsContainer.
+        border_exclusion: nm distance which defines how much of the chunk borders should be excluded from predictions.
+        state_dict: state dict holding model for prediction.
+        model: loaded model to use for prediction.
     """
     if os.path.exists(out_path):
         print(f"{out_path} already exists. Skipping...")
@@ -208,8 +211,7 @@ def generate_predictions_with_model(argscont: ArgsContainer,
 
     torch_handler = TorchHandler(cell_path, argscont.sample_num, argscont.class_num, density_mode=argscont.density_mode,
                                  bio_density=argscont.bio_density, tech_density=argscont.tech_density,
-                                 transform=transforms,
-                                 specific=True, obj_feats=argscont.features, ctx_size=argscont.chunk_size,
+                                 transform=transforms, specific=True, obj_feats=argscont.features, ctx_size=argscont.chunk_size,
                                  label_mappings=label_mappings, hybrid_mode=argscont.hybrid_mode,
                                  feat_dim=argscont.input_channels, splitting_redundancy=chunk_redundancy,
                                  label_remove=label_remove, sampling=argscont.sampling,

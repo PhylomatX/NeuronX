@@ -1,21 +1,19 @@
 import os
 import open3d
 import glob
-import time
 import numpy as np
 import sklearn.metrics as sm
 from tqdm import tqdm
 from morphx.processing import objects, basics
 from typing import List, Tuple, Union
 from neuronx.classes.argscontainer import ArgsContainer
-from neuronx.pipeline import infer, analyse
+from neuronx.pipeline import predict
 from morphx.classes.cloudensemble import CloudEnsemble
 
 
 # -------------------------------------- HELPER METHODS ------------------------------------------- #
 
-def handle_unpreds(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
-    """ Removes labels which equal -1. """
+def remove_points_without_prediction(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
     if drop:
         mask = np.logical_and(gt != -1, hc != -1)
         return gt[mask], hc[mask]
@@ -45,83 +43,90 @@ def write_confusion_matrix(cm: np.array, names: list) -> str:
 
 # -------------------------------------- EVALUATION METHODS ------------------------------------------- #
 
-def eval_validation_set(set_path: str, total=True, mode: str = 'mvs', filters: bool = False,
-                        re_evaluation: bool = False, drop_unpreds: bool = True, data_type: str = 'ce',
-                        eval_name: str = 'evaluation', targets: list = None,
-                        label_mappings: List[Tuple[int, int]] = None, label_remove: List[int] = None):
-    """ Evaluates validations from multiple trainings.
+def evaluate_prediction_set(set_path: str,
+                            total_evaluation=True,
+                            evaluation_mode: str = 'mv',
+                            skeleton_smoothing: bool = False,
+                            force_evaluation: bool = False,
+                            remove_unpredicted: bool = True,
+                            data_type: str = 'ce',
+                            report_name: str = 'evaluation',
+                            label_names: list = None,
+                            label_mappings: List[Tuple[int, int]] = None,
+                            label_remove: List[int] = None):
+    """ 
+    Can be used to evaluate multiple prediction folders.
 
     Args:
-        set_path: path to validation folders
-        total: flag for generating a total evaluation
-        mode: 'd': direct mode (first prediction is taken), 'mv': majority vote mode (majority vote on predictions)
-            'mvs' majority vote smoothing mode (majority vote on predicitons and smoothing afterwards)
-        filters: flag for applying filters to skeleton predictions
-        re_evaluation: flag for forcing a reevaluation
-        drop_unpreds: flag for removing vertices without predictions
-        data_type: type of dataset ('ce' for CloudEnsembles, 'hc' for HybridClouds)
-        eval_name: name of evaluation
-        targets: target names
+        set_path: path to prediction folders.
+        total_evaluation: generate total evaluation (merging all single cell evaluations).
+        evaluation_mode: 'd': direct mode (first prediction is taken),
+              'mv': majority vote mode (majority vote on predictions)
+              'mvs' majority vote smoothing mode (majority vote on predicitons and smoothing afterwards)
+        skeleton_smoothing: Smooth skeleton predictions with sliding window.
+        force_evaluation: Overwrite existing evaluations.
+        remove_unpredicted: remove points without predictions.
+        data_type: type of dataset ('ce' for CloudEnsembles, 'hc' for HybridClouds).
+        report_name: name of evaluation report.
+        label_names: target names of classes.
+        label_mappings: List of tuples like (from, to) where 'from' is label which should get mapped to 'to'.
+            Defaults to label_mappings from training or to val_label_mappings of ArgsContainer.
+        label_remove: List of labels to remove from the cells.
+            Defaults to label_remove from training or to val_label_remove of ArgsContainer.
     """
     set_path = os.path.expanduser(set_path)
-    dirs = os.listdir(set_path)
+    folders = os.listdir(set_path)
     reports = {}
-    for di in tqdm(dirs):
-        di_in_path = set_path + di + '/'
-        di_out_path = set_path + di + '/' + eval_name + '/'
-        if os.path.exists(di_out_path) and not re_evaluation:
-            print(di + " has already been processed. Skipping...")
+    for folder in tqdm(folders):
+        prediction_folder = set_path + folder + '/'
+        evaluation_folder = set_path + folder + '/' + report_name + '/'
+        if os.path.exists(evaluation_folder) and not force_evaluation:
+            print(folder + " has already been processed. Skipping...")
             continue
-        print("Processing " + di)
-        if not os.path.exists(di_in_path + 'argscont.pkl'):
-            print(f'{di} has no argscont.pkl file and gets skipped...')
+        print("Processing " + folder)
+        if not os.path.exists(prediction_folder + 'argscont.pkl'):
+            print(f'{folder} has no argscont.pkl file and gets skipped...')
             continue
-        argscont = ArgsContainer().load_from_pkl(di_in_path + 'argscont.pkl')
-        report = eval_validation(di_in_path, di_out_path, argscont, report_name=eval_name, total=total, mode=mode,
-                                 filters=filters, drop_unpreds=drop_unpreds, data_type=data_type,
-                                 targets=targets, label_mappings=label_mappings, label_remove=label_remove)
+        argscont = ArgsContainer().load_from_pkl(prediction_folder + 'argscont.pkl')
+        report = evaluate_model_predictions(prediction_folder, evaluation_folder, argscont, report_name=report_name,
+                                            total_evaluation=total_evaluation, evaluation_mode=evaluation_mode, skeleton_smoothing=skeleton_smoothing,
+                                            remove_unpredicted=remove_unpredicted, data_type=data_type,
+                                            label_names=label_names, label_mappings=label_mappings, label_remove=label_remove)
         report.update(argscont.attr_dict)
-        reports[di] = report
-    basics.save2pkl(reports, set_path, name=eval_name)
+        reports[folder] = report
+    basics.save2pkl(reports, set_path, name=report_name)
 
 
-def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer = None, report_name: str = 'Evaluation',
-                    total: bool = False, mode: str = 'mvs', filters: bool = False, drop_unpreds: bool = True,
-                    data_type: str = 'ce', targets: list = None, label_mappings: List[Tuple[int, int]] = None,
-                    label_remove: List[int] = None):
-    """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
-        ground truth files with different filters or under different conditions.
-
-    Args:
-        input_path: Location of HybridClouds with predictions, saved as pickle files by a MorphX prediction mapper.
-        output_path: Location where results of evaluation should be saved.
-        argscont: Argument container which was generated during training of the model.
-        report_name: Name of the current evaluation. Is used as the filename in which the evaluation report gets saved.
-        total: Combine the predictions of all files to apply the metrics to the total prediction array.
-        mode: 'd': direct mode (first prediction is taken), 'mv': majority vote mode (majority vote on predictions)
-            'mvs' majority vote smoothing mode (majority vote on predicitons and smoothing afterwards)
-        filters: After mapping the vertex labels to the skeleton, this flag can be used to apply filters to the skeleton
-            and append the evaluation of these filtered skeletons.
-        drop_unpreds: Flag for dropping all vertices or nodes which don't have predictions and whose labels are thus set
-            to -1. If this flag is not set, the number of vertices or nodes without predictions might be much higher
-            than the one of the predicted vertices or nodes, which results in bad evaluation results.
-        data_type: 'ce' for CloudEnsembles, 'hc' for HybridClouds
-        targets: encoding of labels
+def evaluate_model_predictions(prediction_folder: str,
+                               evaluation_folder: str,
+                               argscont: ArgsContainer = None,
+                               report_name: str = 'evaluation',
+                               total_evaluation: bool = False,
+                               evaluation_mode: str = 'mv',
+                               skeleton_smoothing: bool = False,
+                               remove_unpredicted: bool = True,
+                               data_type: str = 'ce',
+                               label_names: list = None,
+                               label_mappings: List[Tuple[int, int]] = None,
+                               label_remove: List[int] = None):
     """
-    input_path = os.path.expanduser(input_path)
-    output_path = os.path.expanduser(output_path)
-    files = glob.glob(input_path + 'sso_*.pkl')
+    Can be used to evaluate a single prediction folder. See `evaluate_prediction_set` for argument descriptions.
+    """
+    prediction_folder = os.path.expanduser(prediction_folder)
+    evaluation_folder = os.path.expanduser(evaluation_folder)
+    predictions = glob.glob(prediction_folder + '*_preds.pkl')
     reports = {}
     reports_txt = "Confusion matrix: row = true label, column = predicted label \n" \
                   "Precision: What percentage of points from one label truly belong to that label \n" \
                   "Recall: What percentage of points from one true label have been predicted as that label \n\n"
-    # Arrays for concatenating the labels of all files for later total evaluation
-    total_labels = {'pred': np.array([]), 'pred_node': np.array([]), 'gt': np.array([]), 'gt_node': np.array([]),
-                    'coverage': [0, 0]}
-    # Build single file evaluation reports
-    for file in tqdm(files):
-        slashs = [pos for pos, char in enumerate(file) if char == '/']
-        name = file[slashs[-1] + 1:-4]
+
+    # arrays for concatenating the labels of all files for later total evaluation
+    total_labels = {'pred': np.array([]), 'pred_node': np.array([]), 'gt': np.array([]), 'gt_node': np.array([]), 'coverage': [0, 0]}
+
+    # --- build single file evaluation reports ---
+    for prediction in tqdm(predictions):
+        slashs = [pos for pos, char in enumerate(prediction) if char == '/']
+        name = prediction[slashs[-1] + 1:-4]
         if label_remove is None:
             if argscont.val_label_remove is not None:
                 label_remove = argscont.val_label_remove
@@ -132,203 +137,182 @@ def eval_validation(input_path: str, output_path: str, argscont: ArgsContainer =
                 label_mappings = argscont.val_label_mappings
             else:
                 label_mappings = argscont.label_mappings
-        report, report_txt = eval_obj(file, total_labels, mode=mode, target_names=targets, filters=filters,
-                                      drop_unpreds=drop_unpreds, data_type=data_type,
-                                      label_mapping=label_mappings, label_remove=label_remove)
+        report, report_txt = evaluate_cell_predictions(prediction, total_labels, evaluation_mode=evaluation_mode, label_names=label_names,
+                                                       skeleton_smoothing=skeleton_smoothing, remove_unpredicted=remove_unpredicted, data_type=data_type,
+                                                       label_mapping=label_mappings, label_remove=label_remove)
         reports[name] = report
         reports_txt += name + '\n\n' + report_txt + '\n\n\n'
-    # Perform evaluation on total label arrays (labels from all files sticked together), prediction
-    # mappings or filters are already included
+
+    # --- build total evaluation report (by merging all single file labels and evaluating the result).
+    # Filters and label mappings are already included in the single file labels. ---
     total_report = {}
     total_report_txt = 'Total\n\n'
-    if total:
+    if total_evaluation:
         coverage = total_labels['coverage']
         total_report['cov'] = coverage
-        targets_vertex = get_target_names(total_labels['gt'], total_labels['pred'], targets)
-        total_report[mode] = \
-            sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True, target_names=targets_vertex)
+
+        # --- vertex evaluation ---
+        targets_vertex = get_target_names(total_labels['gt'], total_labels['pred'], label_names)
+        total_report[evaluation_mode] = \
+            sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True,
+                                     target_names=targets_vertex)
         total_report_txt += \
-            mode + '\n\n' + \
+            evaluation_mode + '\n\n' + \
             f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
             f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
             sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets_vertex) + '\n\n'
-        cm = sm.confusion_matrix(total_labels['gt'], total_labels['pred'])
-        total_report_txt += write_confusion_matrix(cm, targets_vertex) + '\n\n'
-        mode += '_skel'
-        targets_node = get_target_names(total_labels['gt_node'], total_labels['pred_node'], targets)
-        total_report[mode] = \
+        confusion_matrix = sm.confusion_matrix(total_labels['gt'], total_labels['pred'])
+        total_report_txt += write_confusion_matrix(confusion_matrix, targets_vertex) + '\n\n'
+
+        # --- skeleton evaluation ---
+        evaluation_mode += '_skel'
+        targets_node = get_target_names(total_labels['gt_node'], total_labels['pred_node'], label_names)
+        total_report[evaluation_mode] = \
             sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
                                      output_dict=True, target_names=targets_node)
         total_report_txt += \
-            mode + '\n\n' + \
-            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'], target_names=targets_node) + '\n\n'
-        cm_skel = sm.confusion_matrix(total_labels['gt_node'], total_labels['pred_node'])
-        total_report_txt += write_confusion_matrix(cm_skel, targets_node) + '\n\n'
+            evaluation_mode + '\n\n' + \
+            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
+                                     target_names=targets_node) + '\n\n'
+        skeleton_confusion_matrix = sm.confusion_matrix(total_labels['gt_node'], total_labels['pred_node'])
+        total_report_txt += write_confusion_matrix(skeleton_confusion_matrix, targets_node) + '\n\n'
+
+    # --- write reports to file ---
     reports['total'] = total_report
     reports_txt += total_report_txt
-    basics.save2pkl(reports, output_path, name=report_name)
-    with open(output_path + report_name + '.txt', 'w') as f:
+    basics.save2pkl(reports, evaluation_folder, name=report_name)
+    with open(evaluation_folder + report_name + '.txt', 'w') as f:
         f.write(reports_txt)
     return reports
 
 
-def eval_obj(file: str, total: dict = None, mode: str = 'mvs', target_names: list = None, filters: bool = False,
-             drop_unpreds: bool = True, data_type: str = 'obj',
-             label_mapping: List[Tuple[int, int]] = None, label_remove: List[int] = None) -> tuple:
-    """ Apply different metrics to HybridClouds with predictions and compare these predictions with corresponding
-        ground truth files with different filters or under different conditions. See eval_dataset for argument
-        description.
-
-    Returns:
-        Evaluation report as string.
+def evaluate_cell_predictions(prediction: str,
+                              total_evaluation: dict = None,
+                              evaluation_mode: str = 'mv',
+                              label_names: list = None,
+                              skeleton_smoothing: bool = False,
+                              remove_unpredicted: bool = True,
+                              data_type: str = 'obj',
+                              label_mapping: List[Tuple[int, int]] = None,
+                              label_remove: List[int] = None) -> tuple:
+    """
+    Can be used to evaluation single cell prediction. See `evaluate_prediction_set` for argument descriptions.
     """
     reports = {}
     reports_txt = ""
-    file = os.path.expanduser(file)
-    # load predictions and corresponding ground truth
-    preds = basics.load_pkl(file)
-    obj = objects.load_obj(data_type, preds[0])
-
+    prediction = os.path.expanduser(prediction)
+    # --- merge predictions and corresponding ground truth (predictions contain pointer to original cell file)
+    predictions = basics.load_pkl(prediction)
+    obj = objects.load_obj(data_type, predictions[0])
     if label_remove is not None:
         obj.remove_nodes(label_remove)
-    obj.set_predictions(preds[1])
+    obj.set_predictions(predictions[1])
     reports['pred_num'] = obj.pred_num
     if label_mapping is not None:
         obj.map_labels(label_mapping)
-    # Perform majority vote on existing predictions and set these as new labels
-    start = time.time()
-    if mode == 'd':
+
+    # --- reduce multiple predictions to single label by either:
+    # d: taking first prediction as label
+    # mv: taking majority vote on all predictions as new label
+    # mvs: taking majority vote on all predictions as label and apply smoothing ---
+    if evaluation_mode == 'd':
         obj.generate_pred_labels(False)
-    elif mode == 'mv':
+    elif evaluation_mode == 'mv':
         obj.generate_pred_labels()
-    elif mode == 'mvs':
+    elif evaluation_mode == 'mvs':
         obj.generate_pred_labels()
         obj.hc.prediction_smoothing()
     else:
-        raise ValueError(f"Mode {mode} is not known.")
-    pred2label_timing = time.time() - start
-    reports[mode + '_timing'] = pred2label_timing
+        raise ValueError(f"Mode {evaluation_mode} is not known.")
+
     if isinstance(obj, CloudEnsemble):
         hc = obj.hc
     else:
         hc = obj
     if len(hc.pred_labels) != len(hc.labels):
         raise ValueError("Length of predicted label array doesn't match with length of label array.")
-    # Get evaluation for vertices
+
     coverage = hc.get_coverage()
     reports['cov'] = coverage
-    # remove unpredicted labels
-    gtl, hcl = handle_unpreds(hc.labels, hc.pred_labels, drop_unpreds)
-    # generate evaluation and save it as pkl and as txt
-    targets = get_target_names(gtl, hcl, target_names)
-    reports[mode] = sm.classification_report(gtl, hcl, output_dict=True, target_names=targets)
-    reports_txt += mode + '\n\n' \
-                   + f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
-                     f'{round((1-coverage[0]/coverage[1])*100)} %\n\n' + \
-                   f'Timing: {round(pred2label_timing, 3)} s\n\n' + \
-                   f'Number of predictions: {obj.pred_num}\n\n' + \
-                   sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
+
+    # --- vertex evaluation ---
+    gtl, hcl = remove_points_without_prediction(hc.labels, hc.pred_labels, remove_unpredicted)
+    targets = get_target_names(gtl, hcl, label_names)
+    reports[evaluation_mode] = sm.classification_report(gtl, hcl, output_dict=True, target_names=targets)
+    reports_txt += evaluation_mode + '\n\n' + \
+                     f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
+                     f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
+                     f'Number of predictions: {obj.pred_num}\n\n' + \
+                     sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
     cm = sm.confusion_matrix(gtl, hcl)
     reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
-    # Get evaluation for skeletons
-    start = time.time()
-    mode += '_skel'
-    if filters:
-        # apply smoothing filters
-        print("Applying sliding window filter to node predictions")
+
+    # --- skeleton evaluation ---
+    evaluation_mode += '_skel'
+    if skeleton_smoothing:
         hc.node_sliding_window_bfs(neighbor_num=20)
-    # remove unpredicted labels
-    gtnl, hcnl = handle_unpreds(hc.node_labels, hc.pred_node_labels, drop_unpreds)
-    map2skel_timing = time.time() - start
-    reports[mode + '_timing'] = map2skel_timing
-    # generate evaluation and save it as pkl and as txt
-    targets = get_target_names(gtnl, hcnl, target_names)
-    reports[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
-    reports_txt += mode + '\n\n' + f'Timing: {round(map2skel_timing, 3)} s\n\n' + \
-                   sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
+    gtnl, hcnl = remove_points_without_prediction(hc.node_labels, hc.pred_node_labels, remove_unpredicted)
+    targets = get_target_names(gtnl, hcnl, label_names)
+    reports[evaluation_mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
+    reports_txt += evaluation_mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
     cm = sm.confusion_matrix(gtnl, hcnl)
     reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
-    # save generated labels for total evaluation
-    if total is not None:
-        total['pred'] = np.append(total['pred'], hcl)
-        total['pred_node'] = np.append(total['pred_node'], hcnl)
-        total['gt'] = np.append(total['gt'], gtl)
-        total['gt_node'] = np.append(total['gt_node'], gtnl)
-        total['coverage'][0] += coverage[0]
-        total['coverage'][1] += coverage[1]
+
+    # --- save generated labels for total evaluation ---
+    if total_evaluation is not None:
+        total_evaluation['pred'] = np.append(total_evaluation['pred'], hcl)
+        total_evaluation['pred_node'] = np.append(total_evaluation['pred_node'], hcnl)
+        total_evaluation['gt'] = np.append(total_evaluation['gt'], gtl)
+        total_evaluation['gt_node'] = np.append(total_evaluation['gt_node'], gtnl)
+        total_evaluation['coverage'][0] += coverage[0]
+        total_evaluation['coverage'][1] += coverage[1]
     return reports, reports_txt
 
 
-# -------------------------------------- PIPELINE METHODS ------------------------------------------- #
-
-def full_evaluation_pipe(set_path: str, val_path, total=True, mode: str = 'mv', filters: bool = False,
-                         drop_unpreds: bool = True, data_type: str = 'ce', eval_name: str = 'evaluation',
-                         pipe_steps=None, val_iter=2, batch_num: int = -1, save_worst_examples: bool = False,
-                         val_type: str = 'training_set', model_freq: Union[int, list] = 1, target_names: List[str] = None,
-                         re_evaluation: bool = False, specific_model: int = None, redundancy: int = -1,
-                         force_split: bool = False, model_max: int = None, label_mappings: List[Tuple[int, int]] = None,
-                         label_remove: List[int] = None, same_seeds: bool = False, border_exclusion: int = 0,
-                         model_min: int = None, model=None):
-    """ Runs full pipeline on given training set including validation and evaluation.
-
-    Args:
-        val_type: 'training_set' for using the 'validate_training_set' validation method or 'multiple_model' for
-            using the 'validate_multi_model_training' validation method.
+def predict_and_evaluate(train_path: str,
+                         cell_path,
+                         total_evaluation=True,
+                         evaluation_mode: str = 'mv',
+                         skeleton_smoothing: bool = False,
+                         remove_unpredicted: bool = True,
+                         data_type: str = 'ce',
+                         report_name: str = 'evaluation',
+                         prediction_redundancy: int = 2,
+                         batch_size: int = -1,
+                         model_freq: Union[int, list] = 1,
+                         model_max: int = None,
+                         model_min: int = None,
+                         label_names: List[str] = None,
+                         force_evaluation: bool = False,
+                         specific_model: int = None,
+                         chunk_redundancy: int = -1,
+                         force_split: bool = False,
+                         label_mappings: List[Tuple[int, int]] = None,
+                         label_remove: List[int] = None,
+                         training_seed: bool = False,
+                         border_exclusion: int = 0,
+                         model=None):
     """
-    if pipe_steps is None:
-        pipe_steps = [True, True]
-    out_path = set_path + f'{eval_name}_valiter{val_iter}_batchsize{batch_num}/'
-    eval_name += f'_{mode}'
-    set_path = os.path.expanduser(set_path)
-    val_path = os.path.expanduser(val_path)
+    Runs full pipeline on given training set including validation and evaluation.
+    See `generate_predictions_from_training` and `evaluate_prediction_set` for argument descriptions.
+    """
+    out_path = train_path + f'{report_name}/'
+    report_name += f'_{evaluation_mode}'
+    train_path = os.path.expanduser(train_path)
+    cell_path = os.path.expanduser(cell_path)
     out_path = os.path.expanduser(out_path)
-    if save_worst_examples:
-        cloud_out_path = out_path
-    else:
-        cloud_out_path = None
     if not os.path.exists(out_path):
         os.makedirs(out_path)
     with open(out_path + 'eval_kwargs.txt', 'w') as f:
         f.write(str(locals()))
-    if pipe_steps[0]:
-        # run validations
-        infer.generate_predictions_from_training(set_path, val_path, out_path, model_freq, model_min=model_min,
-                                                 prediction_redundancy=val_iter, batch_size=batch_num, specific_model=specific_model,
-                                                 chunk_redundancy=redundancy, force_split=force_split, model_max=model_max,
-                                                 label_mappings=label_mappings, label_remove=label_remove,
-                                                 training_seed=same_seeds, border_exclusion=border_exclusion, model=model)
-    if pipe_steps[1]:
-        # evaluate validations
-        eval_validation_set(out_path, total=total, mode=mode, filters=filters, drop_unpreds=drop_unpreds,
-                            data_type=data_type, eval_name=eval_name, targets=target_names, re_evaluation=re_evaluation,
-                            label_mappings=label_mappings, label_remove=label_remove)
 
+    predict.generate_predictions_from_training(train_path, cell_path, out_path, model_freq, model_min=model_min,
+                                               prediction_redundancy=prediction_redundancy, batch_size=batch_size,
+                                               specific_model=specific_model, chunk_redundancy=chunk_redundancy,
+                                               force_split=force_split, model_max=model_max, label_mappings=label_mappings,
+                                               label_remove=label_remove, training_seed=training_seed,
+                                               border_exclusion=border_exclusion, model=model)
 
-if __name__ == '__main__':
-    # start full pipeline
-    s_path = '~/working_dir/paper/dnh_matrix/'
-    v_path = '/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/'
-    # v_path = '/u/jklimesch/thesis/gt/cmn/dnh/voxeled/evaluation/'
-    # v_path = '/u/jklimesch/thesis/gt/cmn/ads/test/voxeled/'
-    # target_names = ['dendrite', 'neck', 'head']
-    # target_names = ['dendrite', 'spine']
-    # target_names = ['shaft', 'other', 'neck', 'head']
-    # target_names = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
-    # target_names = ['dendrite', 'neck', 'head']
-    target_names = ['dendrite', 'axon', 'soma']
-    # target_names = ['axon', 'bouton', 'terminal']
-    # target_names = []
-
-    red = 5
-    s_paths = ['2020_12_05_24000_32768_2/']
-
-    for ix, p in enumerate(s_paths):
-        model_max = 700
-        model_freq = 30
-        p = s_path + p
-        print(f"\n\nProcessing {p}")
-        eval_name = f'test'
-        full_evaluation_pipe(p, v_path, eval_name=eval_name, pipe_steps=[True, False], val_iter=1, batch_num=-1,
-                             save_worst_examples=False, val_type='multiple_model', specific_model=510, label_remove=[-2],
-                             label_mappings=[], target_names=target_names, redundancy=red, force_split=True,
-                             border_exclusion=0)
+    evaluate_prediction_set(out_path, total_evaluation=total_evaluation, evaluation_mode=evaluation_mode, skeleton_smoothing=skeleton_smoothing,
+                            remove_unpredicted=remove_unpredicted, data_type=data_type, report_name=report_name, label_names=label_names,
+                            force_evaluation=force_evaluation, label_mappings=label_mappings, label_remove=label_remove)
