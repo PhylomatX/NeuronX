@@ -24,7 +24,7 @@ def training_thread(acont: ArgsContainer):
     torch.cuda.empty_cache()
     # define other parameters
     lr = 1e-3
-    lr_stepsize = 1000
+    lr_stepsize = 10000
     lr_dec = 0.995
     max_steps = int(acont.max_step_size / acont.batch_size)
     jit = False
@@ -180,8 +180,8 @@ if __name__ == '__main__':
     today = date.today().strftime("%Y_%m_%d")
     density_mode = False
     bio_density = 100
-    sample_num = 8192
-    chunk_size = 8000
+    sample_num = 8000
+    chunk_size = 8192
     if density_mode:
         name = today + '_{}'.format(bio_density) + '_{}'.format(sample_num)
     else:
@@ -216,13 +216,13 @@ if __name__ == '__main__':
     argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/dasbtnh/',
                              train_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/train/',
                              sample_num=sample_num,
-                             name=name + f'_new_loss_9_classes',
+                             name=name + f'_nokdt_fps',
                              random_seed=1,
                              class_num=9,
                              train_transforms=[clouds.RandomVariation((-40, 40)), clouds.RandomRotate(apply_flip=True),
                                                clouds.Center(), clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
                                                clouds.RandomScale(distr_scale=0.1, distr='uniform'), clouds.Center()],
-                             batch_size=32,
+                             batch_size=16,
                              input_channels=4,
                              use_val=True,
                              val_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/test/',
@@ -231,26 +231,29 @@ if __name__ == '__main__':
                              chunk_size=chunk_size,
                              max_step_size=100000000,
                              hybrid_mode=False,
-                             splitting_redundancy=5,
+                             splitting_redundancy=6,
                              norm_type='gn',
                              label_remove=[-2],
                              label_mappings=[],
+                             pl=32,
                              val_label_mappings=[],
                              val_label_remove=[-2],
                              architecture=[{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+                                           {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
                                            {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
                                            {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
-                                           {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 64},
+                                           {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
                                            {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
                                            {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
                                            {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
                                            {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
                                            {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
                                            {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                           {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                                            {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}],
                              target_names=['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head'],
                              model='ConvAdaptSeg',
-                             search='SearchQuantized')
+                             search='SearchFPS')
     training_thread(argscont)
 
     # clouds.Center(),
