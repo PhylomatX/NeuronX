@@ -23,6 +23,7 @@ def summarize_reports(set_path: str, eval_name: str):
         report.update(argscont)
         reports[di] = report
     basics.save2pkl(reports, set_path, name=eval_name)
+    return os.path.join(set_path, eval_name + '.pkl')
 
 
 def extract_data_from_reports(reports_path: str,
