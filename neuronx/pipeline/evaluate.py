@@ -13,29 +13,21 @@ from morphx.classes.cloudensemble import CloudEnsemble
 
 # -------------------------------------- HELPER METHODS ------------------------------------------- #
 
-def remove_points_without_prediction(gt: np.ndarray, hc: np.ndarray, drop: bool) -> Tuple[np.ndarray, np.ndarray]:
-    if drop:
-        mask = np.logical_and(gt != -1, hc != -1)
-        return gt[mask], hc[mask]
-    else:
-        return gt, hc
-
-
-def get_target_names(gtl: np.ndarray, hcl: np.ndarray, targets: list) -> list:
+def get_target_names(labels: np.ndarray, predictions: np.ndarray, label_names: list) -> list:
     """ Extracts the names of the labels which appear in gtl and hcl. """
-    targets = np.array(targets)
-    total = np.unique(np.concatenate((gtl, hcl), axis=0)).astype(int)
-    return list(targets[total])
+    label_names = np.array(label_names)
+    total = np.unique(np.concatenate((labels, predictions), axis=0)).astype(int)
+    return list(label_names[total])
 
 
-def write_confusion_matrix(cm: np.array, names: list) -> str:
+def write_confusion_matrix(matrix: np.array, label_names: list) -> str:
     txt = f"{'':<15}"
-    for name in names:
+    for name in label_names:
         txt += f"{name:<15}"
     txt += '\n'
-    for ix, name in enumerate(names):
+    for ix, name in enumerate(label_names):
         txt += f"{name:<15}"
-        for num in cm[ix]:
+        for num in matrix[ix]:
             txt += f"{num:<15}"
         txt += '\n'
     return txt
@@ -121,7 +113,11 @@ def evaluate_model_predictions(prediction_folder: str,
                   "Recall: What percentage of points from one true label have been predicted as that label \n\n"
 
     # arrays for concatenating the labels of all files for later total evaluation
-    total_labels = {'pred': np.array([]), 'pred_node': np.array([]), 'gt': np.array([]), 'gt_node': np.array([]), 'coverage': [0, 0]}
+    total_labels = {'vertex_predictions': np.array([]),
+                    'node_predictions': np.array([]),
+                    'vertex_labels': np.array([]),
+                    'node_labels': np.array([]),
+                    'coverage': [0, 0]}
 
     # --- build single file evaluation reports ---
     for prediction in tqdm(predictions):
@@ -152,29 +148,29 @@ def evaluate_model_predictions(prediction_folder: str,
         total_report['cov'] = coverage
 
         # --- vertex evaluation ---
-        targets_vertex = get_target_names(total_labels['gt'], total_labels['pred'], label_names)
+        targets_vertex = get_target_names(total_labels['vertex_labels'], total_labels['vertex_predictions'], label_names)
         total_report[evaluation_mode] = \
-            sm.classification_report(total_labels['gt'], total_labels['pred'], output_dict=True,
+            sm.classification_report(total_labels['vertex_labels'], total_labels['vertex_predictions'], output_dict=True,
                                      target_names=targets_vertex)
         total_report_txt += \
             evaluation_mode + '\n\n' + \
             f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
             f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
-            sm.classification_report(total_labels['gt'], total_labels['pred'], target_names=targets_vertex) + '\n\n'
-        confusion_matrix = sm.confusion_matrix(total_labels['gt'], total_labels['pred'])
+            sm.classification_report(total_labels['vertex_labels'], total_labels['vertex_predictions'], target_names=targets_vertex) + '\n\n'
+        confusion_matrix = sm.confusion_matrix(total_labels['vertex_labels'], total_labels['vertex_predictions'])
         total_report_txt += write_confusion_matrix(confusion_matrix, targets_vertex) + '\n\n'
 
         # --- skeleton evaluation ---
         evaluation_mode += '_skel'
-        targets_node = get_target_names(total_labels['gt_node'], total_labels['pred_node'], label_names)
+        targets_node = get_target_names(total_labels['node_labels'], total_labels['node_predictions'], label_names)
         total_report[evaluation_mode] = \
-            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
+            sm.classification_report(total_labels['node_labels'], total_labels['node_predictions'],
                                      output_dict=True, target_names=targets_node)
         total_report_txt += \
             evaluation_mode + '\n\n' + \
-            sm.classification_report(total_labels['gt_node'], total_labels['pred_node'],
+            sm.classification_report(total_labels['node_labels'], total_labels['node_predictions'],
                                      target_names=targets_node) + '\n\n'
-        skeleton_confusion_matrix = sm.confusion_matrix(total_labels['gt_node'], total_labels['pred_node'])
+        skeleton_confusion_matrix = sm.confusion_matrix(total_labels['node_labels'], total_labels['node_predictions'])
         total_report_txt += write_confusion_matrix(skeleton_confusion_matrix, targets_node) + '\n\n'
 
     # --- write reports to file ---
@@ -202,11 +198,11 @@ def evaluate_cell_predictions(prediction: str,
     reports_txt = ""
     prediction = os.path.expanduser(prediction)
     # --- merge predictions and corresponding ground truth (predictions contain pointer to original cell file)
-    predictions = basics.load_pkl(prediction)
-    obj = objects.load_obj(data_type, predictions[0])
+    vertex_predictions = basics.load_pkl(prediction)
+    obj = objects.load_obj(data_type, vertex_predictions[0])
     if label_remove is not None:
         obj.remove_nodes(label_remove)
-    obj.set_predictions(predictions[1])
+    obj.set_predictions(vertex_predictions[1])
     reports['pred_num'] = obj.pred_num
     if label_mapping is not None:
         obj.map_labels(label_mapping)
@@ -236,34 +232,42 @@ def evaluate_cell_predictions(prediction: str,
     reports['cov'] = coverage
 
     # --- vertex evaluation ---
-    gtl, hcl = remove_points_without_prediction(hc.labels, hc.pred_labels, remove_unpredicted)
-    targets = get_target_names(gtl, hcl, label_names)
-    reports[evaluation_mode] = sm.classification_report(gtl, hcl, output_dict=True, target_names=targets)
+    vertex_labels = hc.labels
+    vertex_predictions = hc.pred_labels
+    if remove_unpredicted:
+        mask = np.logical_and(vertex_labels != -1, vertex_predictions != -1)
+        vertex_labels, vertex_predictions = vertex_labels[mask], vertex_predictions[mask]
+    targets = get_target_names(vertex_labels, vertex_predictions, label_names)
+    reports[evaluation_mode] = sm.classification_report(vertex_labels, vertex_predictions, output_dict=True, target_names=targets)
     reports_txt += evaluation_mode + '\n\n' + \
                      f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
                      f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
                      f'Number of predictions: {obj.pred_num}\n\n' + \
-                     sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
-    cm = sm.confusion_matrix(gtl, hcl)
+                     sm.classification_report(vertex_labels, vertex_predictions, target_names=targets) + '\n\n'
+    cm = sm.confusion_matrix(vertex_labels, vertex_predictions)
     reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
 
     # --- skeleton evaluation ---
     evaluation_mode += '_skel'
     if skeleton_smoothing:
         hc.node_sliding_window_bfs(neighbor_num=20)
-    gtnl, hcnl = remove_points_without_prediction(hc.node_labels, hc.pred_node_labels, remove_unpredicted)
-    targets = get_target_names(gtnl, hcnl, label_names)
-    reports[evaluation_mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
-    reports_txt += evaluation_mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
-    cm = sm.confusion_matrix(gtnl, hcnl)
+    node_labels = hc.node_labels
+    node_predictions = hc.pred_node_labels
+    if remove_unpredicted:
+        mask = np.logical_and(node_labels != -1, node_predictions != -1)
+        node_labels, node_predictions = node_labels[mask], node_predictions[mask]
+    targets = get_target_names(node_labels, node_predictions, label_names)
+    reports[evaluation_mode] = sm.classification_report(node_labels, node_predictions, output_dict=True, target_names=targets)
+    reports_txt += evaluation_mode + '\n\n' + sm.classification_report(node_labels, node_predictions, target_names=targets) + '\n\n'
+    cm = sm.confusion_matrix(node_labels, node_predictions)
     reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
 
     # --- save generated labels for total evaluation ---
     if total_evaluation is not None:
-        total_evaluation['pred'] = np.append(total_evaluation['pred'], hcl)
-        total_evaluation['pred_node'] = np.append(total_evaluation['pred_node'], hcnl)
-        total_evaluation['gt'] = np.append(total_evaluation['gt'], gtl)
-        total_evaluation['gt_node'] = np.append(total_evaluation['gt_node'], gtnl)
+        total_evaluation['vertex_predictions'] = np.append(total_evaluation['vertex_predictions'], vertex_predictions)
+        total_evaluation['node_predictions'] = np.append(total_evaluation['node_predictions'], node_predictions)
+        total_evaluation['vertex_labels'] = np.append(total_evaluation['vertex_labels'], vertex_labels)
+        total_evaluation['node_labels'] = np.append(total_evaluation['node_labels'], node_labels)
         total_evaluation['coverage'][0] += coverage[0]
         total_evaluation['coverage'][1] += coverage[1]
     return reports, reports_txt

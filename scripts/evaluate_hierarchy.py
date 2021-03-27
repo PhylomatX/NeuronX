@@ -3,7 +3,7 @@ import pickle as pkl
 import numpy as np
 import sklearn.metrics as sm
 from typing import Dict, Tuple, List
-from neuronx.pipeline.evaluate import get_target_names, remove_points_without_prediction, write_confusion_matrix
+from neuronx.pipeline.evaluate import get_target_names, write_confusion_matrix
 from morphx.processing import objects, basics
 from morphx.classes.pointcloud import PointCloud
 
@@ -75,8 +75,11 @@ if __name__ == '__main__':
         pc = PointCloud(vertices=verts, labels=labels)
         pc.save2pkl(base_path + f'/merged/merged_{sso_id}.pkl')
 
-        gtl, hcl = remove_points_without_prediction(hc.labels, hc.pred_labels, True)
-        gtnl, hcnl = remove_points_without_prediction(hc.node_labels, hc.pred_node_labels, True)
+        # --- remove points without prediction ---
+        mask = np.logical_and(hc.labels != -1, hc.pred_labels != -1)
+        vertex_labels, vertex_predictions = hc.labels[mask], hc.pred_labels[mask]
+        mask = np.logical_and(hc.node_labels != -1, hc.pred_node_labels != -1)
+        node_labels, node_predictions = hc.node_labels[mask], hc.pred_node_labels[mask]
 
         sso_report = {}
         mode = 'mv'
@@ -85,29 +88,29 @@ if __name__ == '__main__':
         sso_report['cov'] = coverage
 
         # vertex-level eval
-        targets = get_target_names(gtl, hcl, target_names)
-        sso_report[mode] = sm.classification_report(gtl, hcl, output_dict=True, target_names=targets)
+        targets = get_target_names(vertex_labels, vertex_predictions, target_names)
+        sso_report[mode] = sm.classification_report(vertex_labels, vertex_predictions, output_dict=True, target_names=targets)
         reports_txt += mode + '\n\n' + f'Coverage: {coverage[1] - coverage[0]} of {coverage[1]}, ' \
                                        f'{round((1 - coverage[0] / coverage[1]) * 100)} %\n\n' + \
                        f'Number of predictions: {obj.pred_num}\n\n' + \
-                       sm.classification_report(gtl, hcl, target_names=targets) + '\n\n'
-        cm = sm.confusion_matrix(gtl, hcl)
+                       sm.classification_report(vertex_labels, vertex_predictions, target_names=targets) + '\n\n'
+        cm = sm.confusion_matrix(vertex_labels, vertex_predictions)
         reports_txt += write_confusion_matrix(cm, targets) + '\n\n'
 
         # node-level eval
         mode += '_skel'
-        targets = get_target_names(gtnl, hcnl, target_names)
-        sso_report[mode] = sm.classification_report(gtnl, hcnl, output_dict=True, target_names=targets)
-        reports_txt += mode + '\n\n' + sm.classification_report(gtnl, hcnl, target_names=targets) + '\n\n'
-        cm = sm.confusion_matrix(gtnl, hcnl)
+        targets = get_target_names(node_labels, node_predictions, target_names)
+        sso_report[mode] = sm.classification_report(node_labels, node_predictions, output_dict=True, target_names=targets)
+        reports_txt += mode + '\n\n' + sm.classification_report(node_labels, node_predictions, target_names=targets) + '\n\n'
+        cm = sm.confusion_matrix(node_labels, node_predictions)
         reports_txt += write_confusion_matrix(cm, targets) + '\n\n\n\n\n'
 
         # save generated labels for total evaluation
         if total_labels is not None:
-            total_labels['pred'] = np.append(total_labels['pred'], hcl)
-            total_labels['pred_node'] = np.append(total_labels['pred_node'], hcnl)
-            total_labels['gt'] = np.append(total_labels['gt'], gtl)
-            total_labels['gt_node'] = np.append(total_labels['gt_node'], gtnl)
+            total_labels['pred'] = np.append(total_labels['pred'], vertex_predictions)
+            total_labels['pred_node'] = np.append(total_labels['pred_node'], node_predictions)
+            total_labels['gt'] = np.append(total_labels['gt'], vertex_labels)
+            total_labels['gt_node'] = np.append(total_labels['gt_node'], node_labels)
             total_labels['coverage'][0] += coverage[0]
             total_labels['coverage'][1] += coverage[1]
 
