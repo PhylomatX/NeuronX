@@ -7,7 +7,7 @@ from typing import List
 
 # -------------------------------------- REPORT HANDLING ------------------------------------------- #
 
-def summarize_reports(set_path: str, eval_name: str):
+def merge_reports(set_path: str, eval_name: str):
     """
     Combines all reports from multiple evaluations (e.g. checkpoint evaluations) to a single report.
     """
@@ -15,11 +15,11 @@ def summarize_reports(set_path: str, eval_name: str):
     dirs = os.listdir(set_path)
     reports = {}
     for di in dirs:
-        input_path = set_path + di + '/'
-        if not os.path.exists(input_path + f'{eval_name}/{eval_name}' + '.pkl'):
+        report_path = os.path.join(set_path, di + f'/{eval_name}/{eval_name}.pkl')
+        if not os.path.exists(report_path):
             continue
-        report = basics.load_pkl(input_path + f'{eval_name}/{eval_name}' + '.pkl')
-        argscont = basics.load_pkl(input_path + 'argscont.pkl')
+        report = basics.load_pkl(report_path)
+        argscont = basics.load_pkl(os.path.join(set_path, di + '/argscont.pkl'))
         report.update(argscont)
         reports[di] = report
     basics.save2pkl(reports, set_path, name=eval_name)
@@ -91,7 +91,7 @@ def generate_diagram(reports_path: str,
     ax.grid(True, zorder=0)
     plt.tight_layout()
     plt.ylim((0, 1))
-    plt.savefig(output_path + f"{cell_key}_{mode_key}_{class_key}_{metric_key}.png")
+    plt.savefig(os.path.join(output_path, f"{cell_key}_{mode_key}_{class_key}_{metric_key}.png"))
 
 
 def generate_class_diagrams(reports_path: str,

@@ -9,6 +9,8 @@ from typing import List, Tuple, Union
 from neuronx.classes.argscontainer import ArgsContainer
 from neuronx.pipeline import predict
 from morphx.classes.cloudensemble import CloudEnsemble
+import warnings
+warnings.filterwarnings('ignore')
 
 
 # -------------------------------------- HELPER METHODS ------------------------------------------- #
@@ -73,11 +75,8 @@ def evaluate_prediction_set(set_path: str,
         prediction_folder = set_path + folder + '/'
         evaluation_folder = set_path + folder + '/' + report_name + '/'
         if os.path.exists(evaluation_folder) and not force_evaluation:
-            print(folder + " has already been processed. Skipping...")
             continue
-        print("Processing " + folder)
         if not os.path.exists(prediction_folder + 'argscont.pkl'):
-            print(f'{folder} has no argscont.pkl file and gets skipped...')
             continue
         argscont = ArgsContainer().load_from_pkl(prediction_folder + 'argscont.pkl')
         report = evaluate_model_predictions(prediction_folder, evaluation_folder, argscont, report_name=report_name,
@@ -197,7 +196,7 @@ def evaluate_cell_predictions(prediction: str,
     reports = {}
     reports_txt = ""
     prediction = os.path.expanduser(prediction)
-    # --- merge predictions and corresponding ground truth (predictions contain pointer to original cell file)
+    # --- load predictions into corresponding cell (predictions contain pointer to original cell file) ---
     vertex_predictions = basics.load_pkl(prediction)
     obj = objects.load_obj(data_type, vertex_predictions[0])
     if label_remove is not None:
