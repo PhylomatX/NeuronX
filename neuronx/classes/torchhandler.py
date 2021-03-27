@@ -50,7 +50,6 @@ class TorchHandler(data.Dataset):
                  exclude_borders: int = 0,
                  rebalance: dict = None,
                  extend_no_pred: List[int] = None):
-        """ Initializes Dataset. """
         self._ch = ChunkHandler(data_path, sample_num, density_mode=density_mode, bio_density=bio_density,
                                 tech_density=tech_density, ctx_size=ctx_size, transform=transform,
                                 specific=specific, data_type=data_type, obj_feats=obj_feats,
@@ -96,7 +95,6 @@ class TorchHandler(data.Dataset):
         else:
             labels = np.array([])
 
-        # pack all numpy arrays into torch tensors
         pts = torch.from_numpy(sample.vertices).float()
         lbs = torch.from_numpy(labels).long()
         features = torch.from_numpy(sample.features).float()

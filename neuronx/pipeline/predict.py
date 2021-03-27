@@ -25,8 +25,7 @@ def predict_cell(data_loader: TorchHandler,
                  model,
                  prediction_mapper: PredictionMapper,
                  input_channels: int,
-                 point_subsampling: bool = True,
-                 multi_task_learning: bool = True):
+                 point_subsampling: bool = True):
     """
     Can be used to generate predictions for single cells using a pre-loaded model.
 
@@ -41,8 +40,6 @@ def predict_cell(data_loader: TorchHandler,
         prediction_mapper: See PredictionMapper class.
         input_channels: number of input features.
         point_subsampling: sample random points from extracted cell chunks.
-        multi_task_learning: process outputs from model which uses multi-task learning (3 tasks in one). This option is currently hardcoded and
-            requires fixed ordering of all classes.
     """
     batch_num = math.ceil(data_loader.get_obj_length(cell) / batch_size)
 
@@ -93,24 +90,7 @@ def predict_cell(data_loader: TorchHandler,
             prediction_mask = prediction_mask.numpy().astype(bool)
             mapping_idcs = mapping_idcs.numpy()
             output_np = outputs.cpu().detach().numpy()
-
-            # --- reduce model outputs to predictions ---
-            if multi_task_learning:
-                # ads = axon, dendrite, soma / abt = axon, bouton, terminal / dnh = dendrite, neck, head
-                ads = np.argmax(output_np[:, :, [0, 1, 2]], axis=2)
-                abt = np.argmax(output_np[:, :, [3, 4, 5]], axis=2)
-                abt[abt == 1] = 3
-                abt[abt == 2] = 4
-                abt[abt == 0] = 1
-                dnh = np.argmax(output_np[:, :, [6, 7, 8]], axis=2)
-                dnh[dnh == 1] = 5
-                dnh[dnh == 2] = 6
-                full = ads
-                full[full == 0] = dnh[full == 0]
-                full[full == 1] = abt[full == 1]
-                output_np = full
-            else:
-                output_np = np.argmax(output_np, axis=2)
+            output_np = np.argmax(output_np, axis=2)
 
             # --- map chunk predictions back to full cell ---
             for j in range(batch_size):

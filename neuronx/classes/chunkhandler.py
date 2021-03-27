@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-# MorphX - Toolkit for morphology exploration and segmentation
-#
-# Copyright (c) 2019 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Jonathan Klimesch
-
 import os
 import re
 import glob
@@ -121,6 +114,7 @@ class ChunkHandler:
         during inference when predictions of chunk are generated and should be inserted into the
         original object.
     """
+
     def __init__(self,
                  data: Union[str, SuperSegmentationDataset],
                  sample_num: int,
@@ -195,11 +189,12 @@ class ChunkHandler:
             self._data = os.path.expanduser(data)
             if not os.path.exists(self._data):
                 os.makedirs(self._data)
+
+            # --- split cells into chunks and save this split information to file for later loading ---
             if not split_on_demand:
                 if not os.path.exists(self._data + 'splitted/'):
                     os.makedirs(self._data + 'splitted/')
                 self._splitfile = ''
-                # Load chunks or split dataset into chunks if it was not done already
                 if density_mode:
                     if bio_density is None or tech_density is None:
                         raise ValueError("Density mode requires bio_density and tech_density")
@@ -213,17 +208,20 @@ class ChunkHandler:
                 orig_splitfile = self._splitfile
                 while os.path.exists(self._splitfile):
                     if not force_split:
+                        # continue with existing split information
                         with open(self._splitfile, 'rb') as f:
                             self._splitted_objs = pickle.load(f)
                         f.close()
                         break
                     else:
+                        # generate new split information without overriding the old
                         version = re.findall(r"v(\d+).", self._splitfile)
                         if len(version) == 0:
                             self._splitfile = self._splitfile[:-4] + '_v1.pkl'
                         else:
                             version = int(version[0])
-                            self._splitfile = orig_splitfile[:-4] + f'_v{version+1}.pkl'
+                            self._splitfile = orig_splitfile[:-4] + f'_v{version + 1}.pkl'
+                # actual splitting happens here
                 splitting.split(data, self._splitfile, bio_density=bio_density, capacity=sample_num,
                                 tech_density=tech_density, density_splitting=density_mode, chunk_size=ctx_size,
                                 splitted_hcs=self._splitted_objs, redundancy=splitting_redundancy,
@@ -240,7 +238,6 @@ class ChunkHandler:
         self._specific = specific
         self._data_type = data_type
         self._obj_feats = obj_feats
-
         self._label_mappings = label_mappings
         self._hybrid_mode = hybrid_mode
         self._label_remove = label_remove
@@ -277,6 +274,7 @@ class ChunkHandler:
         else:
             self._load_func = self.get_item
 
+        # --- dataloader for experiments when using CMN predictions as ground truth ---
         if type(self._data) == SuperSegmentationDataset:
             for key in self._obj_feats:
                 self._parts[key] = [self._voxel_sizes[key], self._obj_feats[key]]
@@ -284,34 +282,36 @@ class ChunkHandler:
             self._obj_names = Queue()
             self._chunk_list = Queue(maxsize=10000)
             if self._ssd_include is None:
-                print("Gathering sizes.")
                 sizes = [sso.size for sso in self._data.ssvs]
-                print("Done with sizes.")
                 idcs = np.argsort(sizes)
                 self._ssd_include = np.array(self._data.ssv_ids)[idcs[-200:]]
             for ssv in self._ssd_include:
                 if ssv not in self._ssd_exclude:
                     self._obj_names.put(ssv)
-            self._splitters = [Process(target=worker_split, args=(self._obj_names, self._chunk_list, self._data,
-                                                                  self._chunk_size,
-                                                                  self._chunk_size / self._splitting_redundancy,
-                                                                  self._parts, self._ssd_labels,
-                                                                  self._label_mappings, self._split_jitter))
+            self._splitters = [Process(target=worker_split,
+                                       args=(self._obj_names, self._chunk_list, self._data,
+                                             self._chunk_size,
+                                             self._chunk_size / self._splitting_redundancy,
+                                             self._parts, self._ssd_labels,
+                                             self._label_mappings, self._split_jitter))
                                for ix in range(workers)]
             for splitter in self._splitters:
                 splitter.start()
+
+        # --- dataloader for experiments with cells saved as pickle files ---
         else:
             files = glob.glob(data + '*.pkl')
             for file in files:
                 slashs = [pos for pos, char in enumerate(file) if char == '/']
                 name = file[slashs[-1] + 1:-4]
                 self._obj_names.append(name)
-                # In non-specific mode, the entire dataset gets loaded at once
                 if not self._specific:
+                    # load entire dataset into memory
                     obj = self._adapt_obj(objects.load_obj(self._data_type, file))
                     self._objs.append(obj)
             if not self._specific:
                 if split_on_demand:
+                    # do not use split information from file but split cells on the fly
                     for ix, obj in enumerate(tqdm(self._objs)):
                         base_nodes = np.arange(len(obj.nodes)).reshape(-1, 1)[obj.node_labels != -1]
                         base_nodes = np.random.choice(base_nodes, int(len(base_nodes) / 3), replace=True)
@@ -319,11 +319,13 @@ class ChunkHandler:
                         for chunk in chunks:
                             self._chunk_list.append((ix, chunk))
                 else:
+                    # use split information from file
                     for item in self._splitted_objs:
                         if item in self._obj_names:
                             for idx in range(len(self._splitted_objs[item])):
                                 self._chunk_list.append((item, idx))
                 if self._rebalance is not None:
+                    # rebalance occurence of chunks by using chunks which contain specific labels multiple times
                     print("Rebalancing...")
                     balance = {}
                     for key in self._rebalance:
@@ -336,33 +338,21 @@ class ChunkHandler:
                                 for i in range(self._rebalance[key]):
                                     self._chunk_list.append(item)
                                     balance[key] += 1
-                        # label = int(np.unique(obj.labels)[np.unique(obj.labels) < 4])
-                        # balance[label] += 1
-                        # for i in range(self._rebalance[label]):
-                        #     self._chunk_list.append(item)
-                        #     balance[label] += 1
                     print("Done with rebalancing!")
                     print(balance)
                 random.shuffle(self._chunk_list)
 
-        # In specific mode, the files get loaded sequentially
         self._curr_obj = None
         self._curr_name = None
-        # Index of current chunk
         self._ix = 0
         self._size = len(self._chunk_list)
 
     def __len__(self):
-        """ Depending on the mode either the sum of the number of chunks from each
-            objects gets returned or the number of chunks of the last requested
-            object in specific mode.
-        """
         if self._epoch_size is not None:
             size = self._epoch_size
         elif self._ssd_include is not None:
             size = len(self._ssd_include)
         elif self._specific:
-            # Size of last requested object
             if self._curr_name is None:
                 size = 0
             else:
@@ -396,17 +386,13 @@ class ChunkHandler:
             sample.mark_borders(max_label + 1, self._chunk_size - self._exclude_borders, centroid=source_node)
             sample.encoding['border'] = max_label + 1
             sample.no_pred.append('border')
-        # Apply transformations (e.g. Composition of Rotation and Normalization)
         self._transform(sample)
         if len(sample.vertices) > 0:
             if self._verbose:
-                # Return sample, indices from where sample points were taken and number of vertices in the subset
                 return sample, ixs, vert_num
             elif self._specific:
-                # Return sample and indices from where sample points were taken
                 return sample, ixs
             else:
-                # Return only sample in non-specific mode
                 return sample
         else:
             if self._verbose:
@@ -416,7 +402,7 @@ class ChunkHandler:
             else:
                 return None
 
-    def get_item_ssd(self, item: Union[int, Tuple[str, int]]):
+    def get_item_ssd(self, item):
         """
         Loading method used when data is given in form of ssd dataset. Uses multiple workers for splitting of the ssvs.
         """
@@ -429,7 +415,7 @@ class ChunkHandler:
             time.sleep(0.5)
         return self._chunk_list.get(), None, None
 
-    def get_item_specific(self, item: Union[int, Tuple[str, int]]):
+    def get_item_specific(self, item: Tuple[str, int]):
         """
         Loading method used in specific mode, when given item specifies object and index of next chunk.
         """
@@ -452,12 +438,12 @@ class ChunkHandler:
             raise ValueError('In validation mode, items can only be requested with a tuple of object name and '
                              'chunk index within that cloud.')
 
-    def get_item(self, item: Union[int, Tuple[str, int]]):
+    def get_item(self, item: int):
         """
         Loading method for general case, when item only contains the index of the next chunk.
         """
         if self._split_on_demand:
-            if item == self._size-1:
+            if item == self._size - 1:
                 self._chunk_list = []
                 for ix, obj in enumerate(self._objs):
                     jitter = random.randint(-self._split_jitter, self._split_jitter)
@@ -473,8 +459,6 @@ class ChunkHandler:
         next_item = self._chunk_list[item]
         curr_obj_chunks = self._splitted_objs[next_item[0]]
         self._curr_obj = self._objs[self._obj_names.index(next_item[0])]
-        # Load local BFS generated by splitter, extract vertices to all nodes of the local BFS (subset) and draw
-        # random points of these vertices (sample)
         next_ix = next_item[1] % len(curr_obj_chunks)
         local_bfs = curr_obj_chunks[next_ix][1]
         sample, idcs = objects.extract_cloud_subset(self._curr_obj, local_bfs)
@@ -551,11 +535,14 @@ class ChunkHandler:
         return total_attr_dict
 
     def _adapt_obj(self, obj: Union[CloudEnsemble, HybridCloud]) -> Union[CloudEnsemble, HybridCloud]:
-        """ Adds given parameters like features or label mappings to the loaded object. """
-        # transform to HybridCloud:
+        """
+        Transforms the given cell according to the parameters of the dataloader,
+        e.g. adds requested features to the cells / removes certain parts from the cells or maps labels
+        """
+        # transform to HybridCloud if no cell organelles are needed:
         if self._hybrid_mode and isinstance(obj, CloudEnsemble):
             obj = obj.hc
-        # change features
+        # add features to the cell
         if self._obj_feats is not None:
             if isinstance(obj, CloudEnsemble):
                 for name in self._obj_feats:
@@ -565,6 +552,7 @@ class ChunkHandler:
                     subcloud = obj.get_cloud(name)
                     if subcloud is not None:
                         if isinstance(feat_line, dict):
+                            # include myelin information which is saved in the `types` array of the cloud
                             subcloud.types2feat(feat_line)
                         else:
                             if type(feat_line) == int:

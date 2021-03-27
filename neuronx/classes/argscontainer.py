@@ -136,13 +136,14 @@ class ArgsContainer(object):
             if len(self._val_transforms) != t_num:
                 raise ValueError("Validation transforms differ from training transforms")
 
+        self._hybrid_mode = self._input_channels == 1
+
         self._use_cuda = use_cuda
         self._use_big = use_big
         self._random_seed = random_seed
         self._track_running_stats = track_running_stats
         self._max_step_size = max_step_size
         self._label_mappings = label_mappings
-        self._hybrid_mode = hybrid_mode
         self._optimizer = optimizer
         self._scheduler = scheduler
         self._splitting_redundancy = splitting_redundancy
