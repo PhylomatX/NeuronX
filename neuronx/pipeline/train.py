@@ -98,7 +98,6 @@ def training_thread(acont: ArgsContainer):
         exp_name=acont.name,
         num_classes=acont.class_num,
         schedulers={"lr": scheduler},
-        batch_avg=acont.batch_avg,
         target_names=acont.target_names,
         stop_epoch=acont.stop_epoch,
         enable_tensorboard=False

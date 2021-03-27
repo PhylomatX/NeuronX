@@ -12,7 +12,6 @@ class ViewControl(object):
     """ Viewer class for comparison of ground truth with processed files or for viewing validation and training
         examples. """
 
-    # TODO: Make this class more abstract and more uniform in terms of loading
     def __init__(self, path1: str, save_path: str, path2: str = None, cloudset: bool = False, simple: bool = False):
         """
         Args:
@@ -135,7 +134,7 @@ class ViewControl(object):
 
             hybrid_idx = content[0]
             hybrid_file = [file for file in self.files2 if 'cloud_{}'.format(hybrid_idx) in file]
-            hybrid = morphx.data.basics.load_pkl(hybrid_file[0])
+            hybrid = basics.load_pkl(hybrid_file[0])
 
             local_bfs = content[1]
             sample = content[2]
@@ -162,7 +161,6 @@ class ViewControl(object):
         req_files = [file for file in self.files1 if name in file]
         idx = 0
 
-        # TODO: Make this pythonic and less ugly
         while idx < len(req_files):
             file = req_files[idx]
             slashs = [pos for pos, char in enumerate(file) if char == '/']
