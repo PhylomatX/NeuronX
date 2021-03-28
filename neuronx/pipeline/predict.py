@@ -8,6 +8,7 @@ from tqdm import tqdm
 from typing import List, Tuple
 from morphx.processing import clouds
 from neuronx.classes.torchhandler import TorchHandler
+from elektronn3.models.convpoint import SegAdapt, SegBig
 from morphx.classes.pointcloud import PointCloud
 from morphx.postprocessing.mapping import PredictionMapper
 from neuronx.classes.argscontainer import ArgsContainer
@@ -25,7 +26,8 @@ def predict_cell(data_loader: TorchHandler,
                  model,
                  prediction_mapper: PredictionMapper,
                  input_channels: int,
-                 point_subsampling: bool = True):
+                 point_subsampling: bool = True,
+                 lcp_flag: bool = True):
     """
     Can be used to generate predictions for single cells using a pre-loaded model.
 
@@ -40,6 +42,7 @@ def predict_cell(data_loader: TorchHandler,
         prediction_mapper: See PredictionMapper class.
         input_channels: number of input features.
         point_subsampling: sample random points from extracted cell chunks.
+        lcp_flag: If true, LightConvPoint is used.
     """
     batch_num = math.ceil(data_loader.get_obj_length(cell) / batch_size)
 
@@ -78,13 +81,16 @@ def predict_cell(data_loader: TorchHandler,
                 targets[j] = cell_chunk['target']
 
             # --- apply model to batches (LightConvPoint requires transpose) ---
-            pts = pts.transpose(1, 2)
-            features = features.transpose(1, 2)
+            if lcp_flag:
+                pts = pts.transpose(1, 2)
+                features = features.transpose(1, 2)
             pts = pts.to(device, non_blocking=True)
             features = features.to(device, non_blocking=True)
             outputs = model(features, pts)
-            pts = pts.transpose(1, 2)
-            outputs = outputs.transpose(1, 2)
+
+            if lcp_flag:
+                pts = pts.transpose(1, 2)
+                outputs = outputs.transpose(1, 2)
 
             pts = pts.cpu().detach().numpy()
             prediction_mask = prediction_mask.numpy().astype(bool)
@@ -155,16 +161,35 @@ def generate_predictions_with_model(argscont: ArgsContainer,
     else:
         device = torch.device('cpu')
 
+    lcp_flag = False
     if model is not None:
         model = model
+        if isinstance(model, ConvAdaptSeg):
+            lcp_flag = True
     else:
-        kwargs = {}
-        if argscont.model == 'ConvAdaptSeg':
-            kwargs = dict(kernel_num=argscont.pl, architecture=argscont.architecture, activation=argscont.act,
-                          norm=argscont.norm_type)
-        conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
-        model = ConvAdaptSeg(argscont.input_channels, argscont.class_num, get_conv(conv), get_search(argscont.search),
-                             **kwargs)
+        # load model
+        if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
+            kwargs = {}
+            if argscont.model == 'ConvAdaptSeg':
+                kwargs = dict(kernel_num=argscont.pl, architecture=argscont.architecture, activation=argscont.act,
+                              norm=argscont.norm_type)
+            conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
+            model = ConvAdaptSeg(argscont.input_channels, argscont.class_num, get_conv(conv), get_search(argscont.search),
+                                 **kwargs)
+            lcp_flag = True
+        elif argscont.use_big:
+            model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=argscont.dropout,
+                           use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
+                           kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
+                           reductions=argscont.reductions,
+                           first_layer=argscont.first_layer, padding=argscont.padding, nn_center=argscont.nn_center,
+                           centroids=argscont.centroids, pl=argscont.pl, normalize=argscont.cp_norm)
+        else:
+            model = SegAdapt(argscont.input_channels, argscont.class_num, architecture=argscont.architecture,
+                             trs=argscont.track_running_stats, dropout=argscont.dropout, use_bias=argscont.use_bias,
+                             norm_type=argscont.norm_type, kernel_size=argscont.kernel_size, padding=argscont.padding,
+                             nn_center=argscont.nn_center, centroids=argscont.centroids, kernel_num=argscont.pl,
+                             normalize=argscont.cp_norm, act=argscont.act)
         try:
             full = torch.load(model_path + state_dict)
             model.load_state_dict(full)
@@ -212,7 +237,7 @@ def generate_predictions_with_model(argscont: ArgsContainer,
             continue
         print(f"Processing {obj}")
         predict_cell(torch_handler, obj, batch_size, argscont.sample_num, prediction_redundancy, device, model,
-                     prediction_mapper, argscont.input_channels, point_subsampling=argscont.sampling)
+                     prediction_mapper, argscont.input_channels, point_subsampling=argscont.sampling, lcp_flag=lcp_flag)
     if obj is not None:
         prediction_mapper.save_prediction()
     else:

@@ -101,6 +101,9 @@ class TorchHandler(data.Dataset):
 
         if self._specific:
             ixs = torch.from_numpy(ixs)
+        # --- create masks marking which vertices should not get predictions. This is done by mapping
+        # the no_pred encodings (set during dataset generation, see SyConn => jklimesch => ground_truth)
+        # to their labels (mapping only works if encodings are set right, e.g. {'sy': 23, ...})
         no_pred_labels = []
         for name in sample.no_pred:
             if name in sample.encoding.keys():

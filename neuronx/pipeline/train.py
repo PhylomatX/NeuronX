@@ -6,6 +6,7 @@ import numpy as np
 from torch import nn
 from datetime import date
 import morphx.processing.clouds as clouds
+from elektronn3.models.convpoint import SegAdapt, SegBig
 from neuronx.classes.torchhandler import TorchHandler
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
@@ -32,11 +33,27 @@ def training_thread(acont: ArgsContainer):
     else:
         device = torch.device('cpu')
 
-    kwargs = {}
-    if acont.model == 'ConvAdaptSeg':
-        kwargs = dict(kernel_num=acont.pl, architecture=acont.architecture, activation=acont.act, norm=acont.norm_type)
-    conv = dict(layer=acont.conv[0], kernel_separation=acont.conv[1])
-    model = ConvAdaptSeg(acont.input_channels, acont.class_num, get_conv(conv), get_search(acont.search), **kwargs)
+    lcp_flag = False
+    # load model
+    if acont.architecture == 'lcp' or acont.model == 'ConvAdaptSeg':
+        kwargs = {}
+        if acont.model == 'ConvAdaptSeg':
+            kwargs = dict(kernel_num=acont.pl, architecture=acont.architecture, activation=acont.act, norm=acont.norm_type)
+        conv = dict(layer=acont.conv[0], kernel_separation=acont.conv[1])
+        model = ConvAdaptSeg(acont.input_channels, acont.class_num, get_conv(conv), get_search(acont.search), **kwargs)
+        lcp_flag = True
+    elif acont.use_big:
+        model = SegBig(acont.input_channels, acont.class_num, trs=acont.track_running_stats, dropout=acont.dropout,
+                       use_bias=acont.use_bias, norm_type=acont.norm_type, use_norm=acont.use_norm,
+                       kernel_size=acont.kernel_size, neighbor_nums=acont.neighbor_nums, reductions=acont.reductions,
+                       first_layer=acont.first_layer, padding=acont.padding, nn_center=acont.nn_center,
+                       centroids=acont.centroids, pl=acont.pl, normalize=acont.cp_norm)
+    else:
+        model = SegAdapt(acont.input_channels, acont.class_num, architecture=acont.architecture,
+                         trs=acont.track_running_stats, dropout=acont.dropout, use_bias=acont.use_bias,
+                         norm_type=acont.norm_type, kernel_size=acont.kernel_size, padding=acont.padding,
+                         nn_center=acont.nn_center, centroids=acont.centroids, kernel_num=acont.pl,
+                         normalize=acont.cp_norm, act=acont.act)
 
     batch_size = acont.batch_size
 
@@ -100,7 +117,8 @@ def training_thread(acont: ArgsContainer):
         schedulers={"lr": scheduler},
         target_names=acont.target_names,
         stop_epoch=acont.stop_epoch,
-        enable_tensorboard=False
+        enable_tensorboard=False,
+        lcp_flag=lcp_flag,
     )
     # Archiving training script, src folder, env info
     Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
@@ -113,11 +131,24 @@ def training_thread(acont: ArgsContainer):
 
 
 if __name__ == '__main__':
-    # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
     today = date.today().strftime("%Y_%m_%d")
     sample_num = 8000
     chunk_size = 8192
     name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
+
+    # --- ENCODINGS:
+    # j0126: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
+    #
+    # j0251: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6,
+    #        'nr': 7, 'in': 8, 'p': 9, 'st': 10, 'ignore': 11, 'merger': 12, 'pure_dendrite': 13,
+    #        'pure_axon': 14}
+
+    # --- remove all except fully annotated dendrites ---
+    label_remove = [1, 2, 3, 4, 11, 12, 13, 14]
+
+    # --- map nr, in, p, neck to 1 and st, head to 2. Label mappings must always result in a consecutive
+    # labeling starting from 0. Otherwise the loss calulation will throw a CUDA error ---
+    label_mappings = [(7, 1), (8, 1), (9, 1), (5, 1), (10, 2), (6, 2)]
 
     # --- Training with cell organelles ---
     features = {'hc': np.array([1, 0, 0, 0]),
@@ -137,12 +168,12 @@ if __name__ == '__main__':
     # features = {'hc': np.array([1])}
     # input_channels = 1
 
-    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/',
-                             train_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/small/',
+    argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/test/',
+                             train_path='/u/jklimesch/working_dir/test/data/',
                              sample_num=sample_num,
                              name=name + f'_test',
                              random_seed=1,
-                             class_num=7,
+                             class_num=3,
                              train_transforms=[clouds.RandomVariation((-40, 40)),
                                                clouds.RandomRotate(apply_flip=True),
                                                clouds.Center(),
@@ -152,19 +183,19 @@ if __name__ == '__main__':
                              batch_size=16,
                              input_channels=input_channels,
                              use_val=True,
-                             val_path='/u/jklimesch/working_dir/gt/20_09_27/voxeled/small/',
+                             val_path='/u/jklimesch/working_dir/test/data/',
                              val_freq=5,
                              features=features,
                              chunk_size=chunk_size,
                              max_step_size=100000000,
                              splitting_redundancy=1,
                              norm_type='gn',
-                             label_remove=[-2],
-                             label_mappings=[],
+                             label_remove=label_remove,
+                             label_mappings=label_mappings,
                              pl=32,
-                             val_label_mappings=[],
-                             val_label_remove=[-2],
-                             target_names=['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head'],
+                             val_label_mappings=None,
+                             val_label_remove=None,  # add -2 (ignore label) when training with test set from j0126
+                             target_names=['dendrite', 'neck', 'head'],
                              model='ConvAdaptSeg',
                              search='SearchFPS')
     training_thread(argscont)
