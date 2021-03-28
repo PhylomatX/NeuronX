@@ -173,7 +173,7 @@ def visualize_training_set(set_path: str, gt_path: str):
 
 
 def visualize_prediction_set(input_path: str, output_path: str, gt_path: str, random_seed: int = 4,
-                             data_type: str = 'ce'):
+                             data_type: str = 'ce', save_to_image: bool = True):
     """ Saves images of all predicted files at input_path using the visualize_prediction method for each file. """
     files = glob.glob(input_path + 'sso_*.pkl')
     gt_files = glob.glob(gt_path + 'sso_*.pkl')
@@ -188,7 +188,7 @@ def visualize_prediction_set(input_path: str, output_path: str, gt_path: str, ra
                 obj = objects.load_obj(data_type, gt_file)
                 pred = basics.load_pkl(file)
                 obj.set_predictions(pred[1])
-                visualize_prediction(obj, output_path + name + '.png', random_seed=random_seed)
+                visualize_prediction(obj, output_path + name + '.png', random_seed=random_seed, save_to_image=save_to_image)
 
 
 def visualize_data_set(input_path: str, output_path: str, random_seed: int = 4, data_type: str = 'ce'):
@@ -203,7 +203,7 @@ def visualize_data_set(input_path: str, output_path: str, random_seed: int = 4, 
         visualize_clouds([obj], capture=True, path=output_path + name + '.png', random_seed=random_seed)
 
 
-def visualize_prediction(obj: Union[CloudEnsemble, HybridCloud], out_path: str, random_seed: int = 4):
+def visualize_prediction(obj: Union[CloudEnsemble, HybridCloud], out_path: str, random_seed: int = 4, save_to_image: bool = True):
     """ Saves images of prediction of given file in out_path. First, the predictions get reduced onto the labels.
         Labels without predictions get filtered. Second, the vertex labels are mapped onto the skeleton, where
         nodes without vertices take on the label of the nearest neighbor with vertices. Third, the node labels get
@@ -225,7 +225,7 @@ def visualize_prediction(obj: Union[CloudEnsemble, HybridCloud], out_path: str, 
     obj.set_pred_node_labels(red_obj.pred_node_labels)
     obj.prednodel2predvertl()
     obj.set_labels(obj.pred_labels)
-    visualize_clouds([obj], capture=True, path=out_path, random_seed=random_seed)
+    visualize_clouds([obj], capture=save_to_image, path=out_path, random_seed=random_seed)
 
 
 def build_pcd(cloud_list: list, random_seed: int) -> o3d.geometry.PointCloud:
